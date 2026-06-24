@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Partner pet placeholder">
+  <defs>
+    <linearGradient id="fur" x1="30" y1="18" x2="128" y2="142" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D6EAFF"/>
+      <stop offset="1" stop-color="#9B9EEB"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#34346E" flood-opacity=".20"/>
+    </filter>
+  </defs>
+  <ellipse cx="80" cy="134" rx="46" ry="10" fill="#000" opacity=".10"/>
+  <path d="M42 63c-11-22-2-37 17-23 11-10 31-10 42 0 19-14 28 1 17 23 12 11 20 28 20 46 0 29-24 43-58 43s-58-14-58-43c0-18 8-35 20-46Z" fill="url(#fur)" filter="url(#soft)"/>
+  <path d="M39 50c9 2 15 8 17 17-10 1-18-2-23-9 0-6 2-9 6-8Zm82 0c-9 2-15 8-17 17 10 1 18-2 23-9 0-6-2-9-6-8Z" fill="#6871D8" opacity=".35"/>
+  <circle cx="60" cy="93" r="7" fill="#2E2A42"/>
+  <circle cx="100" cy="93" r="7" fill="#2E2A42"/>
+  <circle cx="57" cy="90" r="2" fill="#fff" opacity=".9"/>
+  <circle cx="97" cy="90" r="2" fill="#fff" opacity=".9"/>
+  <path d="M72 108c5 5 11 5 16 0" fill="none" stroke="#454065" stroke-width="4" stroke-linecap="round"/>
+  <path d="M80 28l5 12 13 1-10 8 3 13-11-7-11 7 3-13-10-8 13-1 5-12Z" fill="#FFF1A8" opacity=".86"/>
+</svg>

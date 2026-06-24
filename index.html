@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http: https: ws: wss:;"
+  />
+  <title>Transparent Pet Room</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --room-radius: 28px;
+      --ink: rgba(64, 46, 35, 0.94);
+      --muted: rgba(96, 76, 62, 0.72);
+      --panel: rgba(255, 250, 242, 0.72);
+      --panel-strong: rgba(255, 248, 238, 0.9);
+      --line: rgba(129, 98, 71, 0.22);
+      --shadow: 0 24px 80px rgba(54, 35, 20, 0.24);
+      --status-color: rgba(236, 105, 96, 0.95);
+      --status-glow: rgba(236, 105, 96, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: transparent;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: var(--ink);
+      user-select: none;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    #canvas {
+      position: fixed;
+      inset: 0;
+      background: transparent;
+    }
+
+    .room {
+      position: absolute;
+      min-width: 380px;
+      min-height: 340px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--room-radius);
+      box-shadow: var(--shadow), 0 0 0 1px var(--status-glow), 0 0 26px var(--status-glow);
+      backdrop-filter: blur(20px) saturate(1.1);
+      -webkit-backdrop-filter: blur(20px) saturate(1.1);
+      contain: layout paint;
+      transition: border-color 180ms ease, box-shadow 180ms ease, background 360ms ease, color 360ms ease;
+    }
+
+    .room[data-theme="day"] {
+      --ink: rgba(64, 46, 35, 0.94);
+      --muted: rgba(96, 76, 62, 0.72);
+      --panel: rgba(255, 250, 242, 0.72);
+      --panel-strong: rgba(255, 248, 238, 0.9);
+      --line: rgba(129, 98, 71, 0.22);
+      --shadow: 0 24px 80px rgba(54, 35, 20, 0.24);
+      background:
+        linear-gradient(180deg, rgba(255, 253, 248, 0.82), rgba(250, 226, 196, 0.66)),
+        radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.9), transparent 32%),
+        rgba(255, 244, 229, 0.72);
+    }
+
+    .room[data-theme="night"] {
+      --ink: rgba(255, 249, 235, 0.94);
+      --muted: rgba(235, 224, 210, 0.72);
+      --panel: rgba(36, 36, 58, 0.58);
+      --panel-strong: rgba(45, 45, 76, 0.84);
+      --line: rgba(255, 242, 210, 0.18);
+      --shadow: 0 24px 90px rgba(7, 10, 28, 0.42);
+      background:
+        radial-gradient(circle at 78% 18%, rgba(255, 244, 198, 0.82) 0 12px, transparent 13px),
+        radial-gradient(circle at 22% 26%, rgba(178, 210, 255, 0.20), transparent 34%),
+        linear-gradient(180deg, rgba(29, 36, 67, 0.84), rgba(63, 47, 83, 0.76)),
+        rgba(25, 30, 58, 0.72);
+    }
+
+    .room[data-connection="connected"] {
+      --status-color: rgba(50, 205, 132, 0.96);
+      --status-glow: rgba(50, 205, 132, 0.26);
+      border-color: rgba(50, 205, 132, 0.58);
+    }
+
+    .room[data-connection="waiting"],
+    .room[data-connection="connecting"] {
+      --status-color: rgba(255, 190, 92, 0.96);
+      --status-glow: rgba(255, 190, 92, 0.25);
+      border-color: rgba(255, 190, 92, 0.56);
+    }
+
+    .room[data-connection="disconnected"] {
+      --status-color: rgba(238, 91, 91, 0.96);
+      --status-glow: rgba(238, 91, 91, 0.26);
+      border-color: rgba(238, 91, 91, 0.58);
+    }
+
+
+    .room[data-power="low"] {
+      box-shadow: var(--shadow), 0 0 0 1px rgba(128, 128, 128, 0.12);
+      transition-duration: 0ms;
+    }
+
+    .room[data-power="low"] .pet-avatar,
+    .room[data-power="low"] .connection-led,
+    .room[data-power="low"] .theme-glyph {
+      animation-play-state: paused;
+    }
+
+    .room[data-power="low"] .chat-bubble,
+    .room[data-power="low"] .pet-avatar {
+      transition-duration: 80ms;
+    }
+
+    .room::before {
+      content: "";
+      position: absolute;
+      inset: 64px 0 34%;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.18) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(180deg, rgba(255,255,255,0.12) 1px, transparent 1px) 0 0 / 32px 32px;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .room[data-theme="night"]::before {
+      background:
+        radial-gradient(circle, rgba(255,255,255,0.50) 0 1px, transparent 2px) 0 0 / 44px 36px,
+        linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px) 0 0 / 32px 32px,
+        linear-gradient(180deg, rgba(255,255,255,0.06) 1px, transparent 1px) 0 0 / 32px 32px;
+      opacity: 0.58;
+    }
+
+    .room::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 35%;
+      background:
+        repeating-linear-gradient(90deg, rgba(141, 96, 54, 0.20) 0 42px, rgba(255, 255, 255, 0.16) 42px 44px),
+        linear-gradient(180deg, rgba(185, 133, 80, 0.22), rgba(112, 74, 43, 0.22));
+      pointer-events: none;
+    }
+
+    .room[data-theme="night"]::after {
+      background:
+        repeating-linear-gradient(90deg, rgba(45, 38, 58, 0.46) 0 42px, rgba(255, 255, 255, 0.08) 42px 44px),
+        linear-gradient(180deg, rgba(75, 54, 74, 0.42), rgba(32, 28, 48, 0.52));
+    }
+
+    .room-topbar {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      height: 64px;
+      padding: 12px 14px 10px 18px;
+      border-bottom: 1px solid rgba(129, 98, 71, 0.16);
+      background: rgba(255, 252, 247, 0.58);
+      color: var(--ink);
+      cursor: grab;
+    }
+
+    .room[data-theme="night"] .room-topbar {
+      border-bottom-color: rgba(255, 242, 210, 0.12);
+      background: rgba(29, 31, 58, 0.54);
+    }
+
+    .room-topbar:active {
+      cursor: grabbing;
+    }
+
+    .room-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .room-subtitle {
+      margin-top: 2px;
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .connection-pill,
+    .time-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      max-width: 142px;
+      padding: 4px 9px;
+      border: 1px solid rgba(111, 82, 59, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.44);
+      box-shadow: 0 8px 22px rgba(84, 54, 30, 0.06);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .room[data-theme="night"] .connection-pill,
+    .room[data-theme="night"] .time-pill {
+      border-color: rgba(255, 242, 210, 0.13);
+      background: rgba(255, 255, 255, 0.10);
+    }
+
+    .connection-pill span:last-child,
+    .time-pill span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .connection-led {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--status-color);
+      box-shadow: 0 0 0 4px var(--status-glow), 0 0 16px var(--status-color);
+      animation: led-pulse 1.4s ease-in-out infinite;
+    }
+
+    .theme-glyph {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: currentColor;
+      box-shadow: 0 0 12px currentColor;
+      opacity: 0.82;
+    }
+
+    .icon-button,
+    .plain-button,
+    .send-button {
+      border: 1px solid rgba(111, 82, 59, 0.18);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.52);
+      box-shadow: 0 8px 24px rgba(84, 54, 30, 0.08);
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+
+    .room[data-theme="night"] .icon-button,
+    .room[data-theme="night"] .plain-button,
+    .room[data-theme="night"] .send-button {
+      border-color: rgba(255, 242, 210, 0.15);
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--ink);
+    }
+
+    .icon-button:hover,
+    .plain-button:hover,
+    .send-button:hover,
+    .lang-button.is-active {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.82);
+      border-color: rgba(111, 82, 59, 0.32);
+    }
+
+    .room[data-theme="night"] .icon-button:hover,
+    .room[data-theme="night"] .plain-button:hover,
+    .room[data-theme="night"] .send-button:hover,
+    .room[data-theme="night"] .lang-button.is-active {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 242, 210, 0.32);
+    }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      font-size: 18px;
+    }
+
+    .settings-panel {
+      position: absolute;
+      z-index: 35;
+      top: 76px;
+      right: 14px;
+      width: min(292px, calc(100% - 28px));
+      max-height: calc(100% - 92px);
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid rgba(111, 82, 59, 0.18);
+      border-radius: 20px;
+      background: rgba(255, 252, 247, 0.86);
+      box-shadow: 0 18px 50px rgba(54, 35, 20, 0.18);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      color: var(--ink);
+    }
+
+    .room[data-theme="night"] .settings-panel {
+      border-color: rgba(255, 242, 210, 0.16);
+      background: rgba(34, 35, 64, 0.88);
+      box-shadow: 0 18px 50px rgba(5, 8, 24, 0.28);
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .settings-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .settings-title {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .settings-copy {
+      margin: 0 0 12px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .language-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .lang-button,
+    .plain-button {
+      min-height: 34px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .settings-field {
+      display: grid;
+      gap: 6px;
+      margin: 10px 0;
+    }
+
+    .settings-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .settings-input {
+      width: 100%;
+      min-height: 34px;
+      border: 1px solid rgba(111, 82, 59, 0.16);
+      border-radius: 12px;
+      outline: none;
+      padding: 0 10px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.60);
+      user-select: text;
+    }
+
+    .room[data-theme="night"] .settings-input {
+      border-color: rgba(255, 242, 210, 0.15);
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--ink);
+    }
+
+    .settings-input:focus {
+      border-color: rgba(111, 82, 59, 0.38);
+      background: rgba(255, 255, 255, 0.88);
+    }
+
+    .room[data-theme="night"] .settings-input:focus {
+      border-color: rgba(255, 242, 210, 0.34);
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .settings-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .settings-actions.three {
+      grid-template-columns: 1fr;
+    }
+
+    .room-content {
+      position: absolute;
+      inset: 64px 0 0;
+      z-index: 10;
+    }
+
+    .mini-window {
+      position: absolute;
+      top: 28px;
+      left: 24px;
+      width: 92px;
+      height: 72px;
+      border: 8px solid rgba(139, 101, 70, 0.32);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 68% 24%, rgba(255, 252, 214, 0.95) 0 9px, transparent 10px),
+        linear-gradient(180deg, rgba(168, 219, 243, 0.55), rgba(226, 241, 246, 0.7));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 10px 24px rgba(94, 64, 38, 0.08);
+      transition: background 360ms ease, border-color 360ms ease;
+    }
+
+    .room[data-theme="night"] .mini-window {
+      border-color: rgba(255, 242, 210, 0.18);
+      background:
+        radial-gradient(circle at 70% 24%, rgba(255, 244, 202, 0.92) 0 8px, transparent 9px),
+        radial-gradient(circle at 30% 32%, rgba(255, 255, 255, 0.50) 0 1px, transparent 2px),
+        radial-gradient(circle at 54% 58%, rgba(255, 255, 255, 0.38) 0 1px, transparent 2px),
+        linear-gradient(180deg, rgba(22, 31, 70, 0.72), rgba(57, 55, 93, 0.72));
+    }
+
+    .shelf {
+      position: absolute;
+      top: 42px;
+      right: 30px;
+      width: 122px;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(133, 91, 54, 0.32);
+      box-shadow: 0 16px 0 rgba(133, 91, 54, 0.18);
+    }
+
+    .room[data-theme="night"] .shelf {
+      background: rgba(255, 242, 210, 0.18);
+      box-shadow: 0 16px 0 rgba(255, 242, 210, 0.10);
+    }
+
+    .plant {
+      position: absolute;
+      right: 52px;
+      bottom: 150px;
+      width: 38px;
+      height: 52px;
+      border-radius: 50% 50% 10px 10px;
+      background: linear-gradient(180deg, rgba(87, 138, 93, 0.55), rgba(59, 111, 75, 0.42));
+      box-shadow: 10px 8px 0 rgba(78, 130, 82, 0.32), -10px 10px 0 rgba(92, 146, 94, 0.28);
+    }
+
+    .room[data-theme="night"] .plant {
+      filter: saturate(0.78) brightness(0.82);
+    }
+
+    .plant::after {
+      content: "";
+      position: absolute;
+      left: 7px;
+      bottom: -26px;
+      width: 26px;
+      height: 28px;
+      border-radius: 7px 7px 12px 12px;
+      background: rgba(141, 91, 61, 0.46);
+    }
+
+    .rug {
+      position: absolute;
+      left: 50%;
+      bottom: 104px;
+      width: min(300px, 70%);
+      height: 60px;
+      transform: translateX(-50%);
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.38), rgba(227, 162, 129, 0.32));
+      filter: blur(0.2px);
+    }
+
+    .room[data-theme="night"] .rug {
+      background: radial-gradient(ellipse at center, rgba(255, 245, 215, 0.18), rgba(92, 79, 130, 0.26));
+    }
+
+    .pet-stage {
+      position: absolute;
+      inset: 0 0 150px;
+      z-index: 15;
+      overflow: visible;
+      pointer-events: auto;
+    }
+
+    .pet-avatar {
+      --bubble-left: 50%;
+      --bubble-shift: -50%;
+      --tail-left: 50%;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      z-index: 16;
+      width: clamp(72px, 20%, 104px);
+      min-width: 72px;
+      max-width: 104px;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: var(--ink);
+      cursor: pointer;
+      outline: none;
+      user-select: none;
+      touch-action: none;
+      transform: translate(-50%, -50%);
+      transform-origin: 50% 70%;
+      animation: pet-breathe 4s ease-in-out infinite;
+      transition: left 420ms cubic-bezier(0.2, 0.82, 0.2, 1), top 420ms cubic-bezier(0.2, 0.82, 0.2, 1), filter 260ms ease, opacity 260ms ease;
+    }
+
+    .pet-me {
+      animation-delay: -1.2s;
+    }
+
+    .pet-partner {
+      opacity: 0.92;
+      cursor: pointer;
+      pointer-events: auto;
+      animation-delay: -2.1s;
+    }
+
+    .pet-avatar.is-dragging {
+      z-index: 32;
+      cursor: grabbing;
+      transition: none;
+    }
+
+    .pet-avatar.is-popping {
+      animation: pet-pop 420ms ease;
+    }
+
+
+
+    .pet-avatar[data-state="Walk"] {
+      animation: pet-walk-bob 520ms ease-in-out infinite;
+    }
+
+    .pet-avatar[data-state="Shocked"] {
+      animation: pet-shocked-shake 180ms steps(2, end) infinite;
+    }
+
+    .pet-avatar[data-state="Shocked"] .pet-sprite {
+      filter: drop-shadow(0 16px 22px rgba(75, 50, 30, 0.18)) drop-shadow(0 0 18px rgba(255, 230, 102, 0.50));
+    }
+
+    .room[data-theme="night"] .pet-avatar[data-state="Shocked"] .pet-sprite {
+      filter: saturate(1.08) brightness(1.08) drop-shadow(0 0 20px rgba(255, 244, 205, 0.36));
+    }
+
+    .pet-sprite {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: contain;
+      filter: drop-shadow(0 16px 22px rgba(75, 50, 30, 0.18));
+      pointer-events: none;
+      -webkit-user-drag: none;
+      user-drag: none;
+    }
+
+    .room[data-theme="night"] .pet-sprite {
+      filter: saturate(0.92) brightness(0.92) drop-shadow(0 0 14px rgba(255, 244, 205, 0.16));
+    }
+
+    .pet-label {
+      display: block;
+      width: max-content;
+      max-width: 120%;
+      margin: 3px auto 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.56);
+      box-shadow: 0 8px 18px rgba(75, 50, 30, 0.08);
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .room[data-theme="night"] .pet-label {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .chat-bubble {
+      position: absolute;
+      left: var(--bubble-left);
+      bottom: calc(100% + 9px);
+      z-index: 38;
+      width: max-content;
+      min-width: 34px;
+      max-width: min(260px, calc(100vw - 56px));
+      padding: 8px 11px;
+      border: 2px solid rgba(64, 46, 35, 0.78);
+      border-radius: 18px 18px 18px 6px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 12px 28px rgba(38, 25, 17, 0.18);
+      color: rgba(42, 32, 28, 0.96);
+      font-size: 13px;
+      font-weight: 750;
+      line-height: 1.36;
+      letter-spacing: 0.01em;
+      text-align: start;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: normal;
+      line-break: auto;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(var(--bubble-shift), 7px) scale(0.98);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .room[data-theme="night"] .chat-bubble {
+      border-color: rgba(255, 244, 216, 0.78);
+      background: rgba(43, 43, 72, 0.94);
+      box-shadow: 0 12px 30px rgba(5, 8, 24, 0.32);
+      color: rgba(255, 249, 235, 0.96);
+    }
+
+    .chat-bubble::after {
+      content: "";
+      position: absolute;
+      left: var(--tail-left);
+      bottom: -8px;
+      width: 13px;
+      height: 13px;
+      border-right: 2px solid rgba(64, 46, 35, 0.78);
+      border-bottom: 2px solid rgba(64, 46, 35, 0.78);
+      background: inherit;
+      transform: translateX(-50%) rotate(45deg);
+      transform-origin: center;
+    }
+
+    .room[data-theme="night"] .chat-bubble::after {
+      border-color: rgba(255, 244, 216, 0.78);
+    }
+
+    .chat-bubble.is-visible {
+      opacity: 1;
+      transform: translate(var(--bubble-shift), 0) scale(1);
+    }
+
+    .pet-avatar[data-bubble-edge="left"] {
+      --bubble-left: 0;
+      --bubble-shift: 0;
+      --tail-left: 24px;
+    }
+
+    .pet-avatar[data-bubble-edge="right"] {
+      --bubble-left: 100%;
+      --bubble-shift: -100%;
+      --tail-left: calc(100% - 24px);
+    }
+
+    .pet-avatar[data-bubble-vertical="below"] .chat-bubble {
+      top: calc(100% + 9px);
+      bottom: auto;
+      border-radius: 6px 18px 18px 18px;
+      transform: translate(var(--bubble-shift), -7px) scale(0.98);
+    }
+
+    .pet-avatar[data-bubble-vertical="below"] .chat-bubble.is-visible {
+      transform: translate(var(--bubble-shift), 0) scale(1);
+    }
+
+    .pet-avatar[data-bubble-vertical="below"] .chat-bubble::after {
+      top: -8px;
+      bottom: auto;
+      border-right: 0;
+      border-bottom: 0;
+      border-left: 2px solid rgba(64, 46, 35, 0.78);
+      border-top: 2px solid rgba(64, 46, 35, 0.78);
+    }
+
+    .room[data-theme="night"] .pet-avatar[data-bubble-vertical="below"] .chat-bubble::after {
+      border-color: rgba(255, 244, 216, 0.78);
+    }
+
+    .message-panel {
+      position: absolute;
+      z-index: 18;
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      height: 132px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid rgba(111, 82, 59, 0.14);
+      border-radius: 20px;
+      background: rgba(255, 252, 247, 0.72);
+      box-shadow: 0 16px 42px rgba(54, 35, 20, 0.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      color: var(--ink);
+    }
+
+    .room[data-theme="night"] .message-panel {
+      border-color: rgba(255, 242, 210, 0.13);
+      background: rgba(31, 32, 61, 0.68);
+      box-shadow: 0 16px 42px rgba(5, 8, 24, 0.24);
+    }
+
+    .message-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .message-hint {
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .message-log {
+      flex: 1;
+      overflow: auto;
+      padding-right: 4px;
+      user-select: text;
+      scrollbar-width: thin;
+    }
+
+    .message {
+      margin-bottom: 5px;
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--ink);
+      opacity: 0.9;
+    }
+
+    .message strong {
+      font-weight: 800;
+    }
+
+    .message-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .message-input {
+      width: 100%;
+      height: 34px;
+      border: 1px solid rgba(111, 82, 59, 0.16);
+      border-radius: 14px;
+      outline: none;
+      padding: 0 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.62);
+      user-select: text;
+    }
+
+    .room[data-theme="night"] .message-input {
+      border-color: rgba(255, 242, 210, 0.15);
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--ink);
+    }
+
+    .message-input:focus {
+      border-color: rgba(111, 82, 59, 0.38);
+      background: rgba(255, 255, 255, 0.88);
+    }
+
+    .room[data-theme="night"] .message-input:focus {
+      border-color: rgba(255, 242, 210, 0.34);
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .message-input::placeholder,
+    .settings-input::placeholder {
+      color: var(--muted);
+    }
+
+    .send-button {
+      min-width: 68px;
+      height: 34px;
+      border-radius: 14px;
+      padding: 0 12px;
+      font-weight: 800;
+    }
+
+    .resize-handle {
+      position: absolute;
+      z-index: 50;
+    }
+
+    .resize-n,
+    .resize-s {
+      left: 18px;
+      right: 18px;
+      height: 10px;
+      cursor: ns-resize;
+    }
+
+    .resize-n { top: 0; }
+    .resize-s { bottom: 0; }
+
+    .resize-e,
+    .resize-w {
+      top: 18px;
+      bottom: 18px;
+      width: 10px;
+      cursor: ew-resize;
+    }
+
+    .resize-e { right: 0; }
+    .resize-w { left: 0; }
+
+    .resize-ne,
+    .resize-nw,
+    .resize-se,
+    .resize-sw {
+      width: 22px;
+      height: 22px;
+    }
+
+    .resize-ne { top: 0; right: 0; cursor: nesw-resize; }
+    .resize-nw { top: 0; left: 0; cursor: nwse-resize; }
+    .resize-se { right: 0; bottom: 0; cursor: nwse-resize; }
+    .resize-sw { left: 0; bottom: 0; cursor: nesw-resize; }
+
+    .room.is-moving,
+    .room.is-resizing {
+      transition: none;
+    }
+
+    @keyframes pet-breathe {
+      0%, 100% { translate: 0 0; scale: 1; }
+      50% { translate: 0 -5px; scale: 1.015; }
+    }
+
+    @keyframes pet-pop {
+      0%, 100% { scale: 1; }
+      40% { scale: 1.08; }
+      70% { scale: 0.98; }
+    }
+
+
+
+    @keyframes pet-walk-bob {
+      0%, 100% { translate: 0 0; scale: 1; rotate: -1deg; }
+      50% { translate: 0 -4px; scale: 1.025; rotate: 1deg; }
+    }
+
+    @keyframes pet-shocked-shake {
+      0%, 100% { translate: 0 0; scale: 1.05; rotate: -2deg; }
+      50% { translate: 2px -2px; scale: 1.08; rotate: 2deg; }
+    }
+
+    @keyframes led-pulse {
+      0%, 100% { opacity: 0.45; transform: scale(0.84); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    @media (max-width: 600px) {
+      .time-pill,
+      .power-pill {
+        display: none;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .room-subtitle,
+      .connection-pill,
+      .message-hint,
+      .shelf,
+      .plant {
+        display: none;
+      }
+
+      .pet-avatar {
+        width: clamp(64px, 22%, 88px);
+      }
+
+      .pet-stage {
+        inset: 0 0 142px;
+      }
+
+      .message-panel {
+        height: 124px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pet-avatar,
+      .connection-led,
+      .icon-button,
+      .plain-button,
+      .send-button {
+        animation: none;
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas">
+    <section id="room" class="room" data-theme="day" data-connection="disconnected" data-power="active" aria-label="Pet room">
+      <header id="dragHandle" class="room-topbar" data-i18n-title="dragHint">
+        <div>
+          <h1 class="room-title" data-i18n="roomTitle">暖暖小房間</h1>
+          <div class="room-subtitle" data-i18n="roomSubtitle">兩隻桌寵生活的小角落</div>
+        </div>
+
+        <div class="topbar-actions">
+          <div id="connectionStatus" class="connection-pill" data-i18n-title="connectionTooltip">
+            <span class="connection-led" aria-hidden="true"></span>
+            <span id="connectionText">未連線</span>
+          </div>
+          <div id="timeThemeStatus" class="time-pill" data-i18n-title="timeThemeTooltip">
+            <span class="theme-glyph" aria-hidden="true"></span>
+            <span id="timeThemeText">白天</span>
+          </div>
+          <div id="powerModeStatus" class="time-pill power-pill" data-i18n-title="powerModeTooltip">
+            <span class="theme-glyph" aria-hidden="true"></span>
+            <span id="powerModeText">正常</span>
+          </div>
+          <button id="settingsButton" class="icon-button" type="button" data-i18n-title="settingsTooltip" data-i18n-aria-label="settingsTooltip">⚙</button>
+        </div>
+      </header>
+
+      <aside id="settingsPanel" class="settings-panel" hidden>
+        <div class="settings-head">
+          <div class="settings-title" data-i18n="settingsTitle">設定</div>
+          <button id="closeSettingsButton" class="icon-button" type="button" data-i18n-title="close" data-i18n-aria-label="close">×</button>
+        </div>
+        <p class="settings-copy" data-i18n="languageHint">切換介面語言，訊息會立即更新。</p>
+        <div class="language-toggle" role="group" aria-label="Language">
+          <button class="plain-button lang-button" type="button" data-lang="zh">繁中</button>
+          <button class="plain-button lang-button" type="button" data-lang="en">EN</button>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="serverUrlInput" data-i18n="serverUrlLabel">伺服器網址</label>
+          <input id="serverUrlInput" class="settings-input" type="url" autocomplete="off" spellcheck="false" placeholder="http://localhost:3000" />
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="pairCodeInput" data-i18n="pairCodeLabel">配對代碼</label>
+          <input id="pairCodeInput" class="settings-input" type="text" autocomplete="off" spellcheck="false" placeholder="default" />
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="accessKeyInput" data-i18n="accessKeyLabel">伺服器通行金鑰（選填）</label>
+          <input id="accessKeyInput" class="settings-input" type="password" autocomplete="off" spellcheck="false" data-i18n-placeholder="accessKeyPlaceholder" />
+        </div>
+
+
+        <p class="settings-copy" data-i18n="shockedTextHint">你的桌寵被輕戳時會用這段文字回應；留空會使用預設雙語文字。</p>
+
+        <div class="settings-field">
+          <label class="settings-label" for="shockedTextZhInput" data-i18n="shockedTextZhLabel">被戳時顯示（繁中）</label>
+          <input id="shockedTextZhInput" class="settings-input" type="text" autocomplete="off" maxlength="80" placeholder="別戳我！" />
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="shockedTextEnInput" data-i18n="shockedTextEnLabel">被戳時顯示（English）</label>
+          <input id="shockedTextEnInput" class="settings-input" type="text" autocomplete="off" maxlength="80" placeholder="Don't touch me!" />
+        </div>
+
+        <div class="settings-actions three">
+          <button id="savePetTextButton" class="plain-button" type="button" data-i18n="savePetText">儲存泡泡文字</button>
+        </div>
+
+        <p class="settings-copy" data-i18n="connectionHint">兩台電腦使用相同伺服器網址與配對代碼，就會進入同一個私人房間。</p>
+
+        <div class="settings-actions three">
+          <button id="applyConnectionButton" class="plain-button" type="button" data-i18n="applyConnection">套用並重新連線</button>
+        </div>
+
+        <div class="settings-actions">
+          <button id="resetRoomButton" class="plain-button" type="button" data-i18n="resetRoom">重置位置</button>
+          <button id="quitButton" class="plain-button" type="button" data-i18n="quit">離開</button>
+        </div>
+      </aside>
+
+      <main class="room-content">
+        <div class="mini-window" aria-hidden="true"></div>
+        <div class="shelf" aria-hidden="true"></div>
+        <div class="plant" aria-hidden="true"></div>
+        <div class="rug" aria-hidden="true"></div>
+
+        <div id="petStage" class="pet-stage" aria-label="Pet stage">
+          <div id="petMe" class="pet-avatar pet-me" data-pet="pet_me" data-state="Idle" role="button" tabindex="0" data-i18n-title="petMeDragTooltip" data-i18n-aria-label="petMeDragTooltip">
+            <div id="petMeBubble" class="chat-bubble" aria-live="polite"></div>
+            <img id="petMeImg" class="pet-sprite" src="./assets/pet-me-idle.svg" alt="" draggable="false" />
+            <span class="pet-label" data-i18n="petMeName">我的桌寵</span>
+          </div>
+
+          <div id="petPartner" class="pet-avatar pet-partner" data-pet="pet_partner" data-state="Idle" role="button" tabindex="0" data-i18n-title="petPartnerTooltip" data-i18n-aria-label="petPartnerTooltip" aria-hidden="false">
+            <div id="petPartnerBubble" class="chat-bubble" aria-live="polite"></div>
+            <img id="petPartnerImg" class="pet-sprite" src="./assets/pet-partner-idle.svg" alt="" draggable="false" />
+            <span class="pet-label" data-i18n="petPartnerName">夥伴桌寵</span>
+          </div>
+        </div>
+
+        <section class="message-panel" aria-live="polite">
+          <div class="message-head">
+            <span data-i18n="messageLog">訊息</span>
+            <span class="message-hint" data-i18n="clickThroughHint">房間外點擊會穿透到桌面</span>
+          </div>
+          <div id="messageLog" class="message-log"></div>
+          <form id="messageForm" class="message-form">
+            <input id="messageInput" class="message-input" type="text" autocomplete="off" data-i18n-placeholder="messagePlaceholder" />
+            <button id="sendButton" class="send-button" type="submit" data-i18n="send">送出</button>
+          </form>
+        </section>
+      </main>
+
+      <div class="resize-handle resize-n" data-dir="n"></div>
+      <div class="resize-handle resize-s" data-dir="s"></div>
+      <div class="resize-handle resize-e" data-dir="e"></div>
+      <div class="resize-handle resize-w" data-dir="w"></div>
+      <div class="resize-handle resize-ne" data-dir="ne"></div>
+      <div class="resize-handle resize-nw" data-dir="nw"></div>
+      <div class="resize-handle resize-se" data-dir="se"></div>
+      <div class="resize-handle resize-sw" data-dir="sw"></div>
+    </section>
+  </div>
+
+  <script src="./node_modules/socket.io-client/dist/socket.io.min.js"></script>
+  <script src="./renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+{
+  "name": "transparent-pet-room",
+  "version": "0.5.0",
+  "description": "Transparent fullscreen desktop pet room with deployable Socket.IO bridge, accountless pairing, dual pets, state machine, and low-power optimization.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "server": "npm --prefix server start",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win nsis portable --publish never",
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb --publish never"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.transparentpet.room",
+    "productName": "Transparent Pet Room",
+    "copyright": "Copyright © 2026 Transparent Pet Room",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "package.json",
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "assets/**/*",
+      "node_modules/socket.io-client/dist/socket.io.min.js"
+    ],
+    "asar": true,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.entertainment"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

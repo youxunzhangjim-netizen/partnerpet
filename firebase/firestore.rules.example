@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Not used by the current accountless Socket.IO app.
+    // Use this only if you later add Firebase Auth + Firestore accounts.
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function validMembers(data) {
+      return data.memberUids is list
+        && data.memberUids.size() == 2
+        && request.auth.uid in data.memberUids;
+    }
+
+    match /users/{uid} {
+      allow create: if isSelf(uid) && request.resource.data.uid == uid;
+      allow read, update, delete: if isSelf(uid);
+    }
+
+    match /pairs/{pairId} {
+      allow create: if signedIn() && validMembers(request.resource.data);
+      allow read, update, delete: if signedIn() && validMembers(resource.data);
+    }
+
+    match /settings/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: transparent-pet-room-bridge
+    runtime: node
+    rootDir: server
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NODE_ENV
+        value: production
+      - key: SERVER_NAME
+        value: transparent-pet-room-bridge
+      - key: CLIENT_ORIGINS
+        value: "*"
+      - key: MAX_MESSAGE_LENGTH
+        value: "600"
+      - key: SERVER_ACCESS_KEY
+        sync: false
