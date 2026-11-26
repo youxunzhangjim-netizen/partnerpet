@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('petRoomAPI', {
   quit: () => {
     ipcRenderer.send('pet-room:quit');
   },
+  reportIssue: () => ipcRenderer.invoke('pet-room:report-issue'),
   minimize: () => {
     ipcRenderer.send('pet-room:minimize');
   }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, screen, shell } = require('electron');
 const path = require('node:path');
 
 let mainWindow = null;
@@ -86,4 +86,17 @@ ipcMain.on('pet-room:minimize', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return;
   win.minimize();
+});
+
+ipcMain.handle('pet-room:report-issue', async (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Untrusted issue report request');
+  }
+  // The renderer cannot choose a URL, protocol, recipient, or message content.
+  const body = "Project / 專案: PartnerPets\n\nWhat happened? / 遇到什麼問題？\n\nSteps to reproduce / 重現步驟:\n1. \n2. \n\nExpected result / 預期結果:\n\nBrowser or device / 瀏覽器或裝置:\n"
+    + '\nApp version / 版本: ' + app.getVersion();
+  const url = 'mailto:youxunzhangjim@gmail.com?subject='
+    + encodeURIComponent('[PartnerPets] Problem report / 問題回報')
+    + '&body=' + encodeURIComponent(body);
+  await shell.openExternal(url);
 });

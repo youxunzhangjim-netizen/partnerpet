@@ -41,6 +41,7 @@
       "config.js",
       "index.html",
       "renderer.js",
+      "report-issue.js",
       "assets/**/*",
       "node_modules/socket.io-client/dist/socket.io.min.js"
     ],
