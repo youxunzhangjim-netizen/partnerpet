@@ -37,7 +37,7 @@ jobs:
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: transparent-pet-room-${{ matrix.os }}
+          name: partnerpets-${{ matrix.os }}
           path: release/**
           if-no-files-found: error
 

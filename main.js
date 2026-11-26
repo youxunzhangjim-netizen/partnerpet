@@ -25,6 +25,7 @@ function createWindow() {
     title: 'Transparent Pet Room',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      // Keep the renderer web-like: no Node.js globals, and only the tiny preload API below.
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -79,4 +80,10 @@ ipcMain.on('pet-room:set-mouse-pass-through', (event, shouldPassThrough) => {
 
 ipcMain.on('pet-room:quit', () => {
   app.quit();
+});
+
+ipcMain.on('pet-room:minimize', (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win || win.isDestroyed()) return;
+  win.minimize();
 });

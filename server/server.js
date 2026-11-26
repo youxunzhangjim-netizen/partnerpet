@@ -5,9 +5,16 @@ const crypto = require('node:crypto');
 const { Server } = require('socket.io');
 
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const MAX_MESSAGE_LENGTH = Number(process.env.MAX_MESSAGE_LENGTH || 600);
 const SERVER_NAME = process.env.SERVER_NAME || 'transparent-pet-room-server';
+const DEBUG_PAIR_CODES = process.env.DEBUG_PAIR_CODES === 'true';
+const RATE_LIMITS = Object.freeze({
+  pet_move: { windowMs: 1000, maxCount: 40 },
+  send_msg: { windowMs: 5000, maxCount: 12 },
+  pet_action: { windowMs: 1000, maxCount: 15 }
+});
 
 // Comma-separated allowlist, for example:
 // CLIENT_ORIGINS=https://your-app.example.com,http://localhost:5173,file://
@@ -18,9 +25,9 @@ const ALLOWED_ORIGINS = (process.env.CLIENT_ORIGINS || '*')
   .filter(Boolean);
 
 // Optional shared key. Leave empty for accountless/open pairing.
-// Set SERVER_ACCESS_KEY in production when you want only invited users to connect.
+// Set ACCESS_TOKEN or SERVER_ACCESS_KEY in production when only invited users should connect.
 // APP_SECRET is accepted as a backward-compatible alias.
-const SERVER_ACCESS_KEY = String(process.env.SERVER_ACCESS_KEY || process.env.APP_SECRET || '').trim();
+const SERVER_ACCESS_KEY = String(process.env.ACCESS_TOKEN || process.env.SERVER_ACCESS_KEY || process.env.APP_SECRET || '').trim();
 
 const waitingByPairCode = new Map(); // pairCode -> socket.id[]
 const sessions = new Map(); // roomId -> { roomId, pairCode, members: Set<string>, createdAt }
@@ -79,25 +86,6 @@ const io = new Server(httpServer, {
   }
 });
 
-io.use((socket, next) => {
-  if (!SERVER_ACCESS_KEY) {
-    next();
-    return;
-  }
-
-  const provided = safeString(socket.handshake.auth?.accessKey || socket.handshake.query?.accessKey || '', 256);
-  if (timingSafeStringEqual(provided, SERVER_ACCESS_KEY)) {
-    next();
-    return;
-  }
-
-  log('unauthorized_client', {
-    socketId: socket.id,
-    origin: socket.handshake.headers.origin || null
-  });
-  next(new Error('unauthorized'));
-});
-
 function nowIso() {
   return new Date().toISOString();
 }
@@ -107,9 +95,19 @@ function log(event, data = {}) {
   console.log(JSON.stringify(line));
 }
 
+function pairCodeMeta(pairCode) {
+  // Pair Codes are invitation-like private data, so production logs only get a short hash.
+  const hash = crypto.createHash('sha256').update(String(pairCode)).digest('hex').slice(0, 12);
+  return DEBUG_PAIR_CODES ? { pairCode, pairCodeHash: hash } : { pairCodeHash: hash };
+}
+
 function safeString(value, maxLength = 120) {
   if (typeof value !== 'string') return '';
-  return value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, maxLength);
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '').trim().slice(0, maxLength);
+}
+
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === '[object Object]';
 }
 
 function timingSafeStringEqual(a, b) {
@@ -118,8 +116,18 @@ function timingSafeStringEqual(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
+function isAccessAuthorized(socket) {
+  if (!SERVER_ACCESS_KEY) return true;
+  const provided = safeString(socket.handshake.auth?.accessKey || socket.handshake.query?.accessKey || '', 256);
+  // Timing-safe comparison avoids leaking partial token matches.
+  return timingSafeStringEqual(provided, SERVER_ACCESS_KEY);
+}
+
 function normalizePairCode(raw) {
-  const value = safeString(raw || 'default', 64);
+  const value = safeString(raw || 'default', 64)
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .toLowerCase();
   return value || 'default';
 }
 
@@ -192,11 +200,39 @@ function createPair(socketA, socketB, pairCode) {
     createdAt
   });
 
-  log('paired', { roomId, pairCode, members: [socketA.id, socketB.id] });
+  log('paired', { roomId, ...pairCodeMeta(pairCode), members: [socketA.id, socketB.id] });
+}
+
+function hasActiveSessionForPairCode(pairCode) {
+  for (const session of sessions.values()) {
+    if (session.pairCode === pairCode && session.members.size >= 2) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function enqueueOrPair(socket) {
+  // Pairing lifecycle:
+  // 1. The first clean socket for a pair code waits in a FIFO queue.
+  // 2. The second clean socket is paired with the first into a unique two-member room.
+  // 3. Extra sockets using the same pair code are told the room is full and stay queued.
+  // 4. If one paired socket disconnects, the partner leaves that room and re-enters the queue.
+  // Existing realtime events remain partner-only and are never broadcast to the waiting queue.
   const pairCode = socket.data.pairCode;
+
+  if (hasActiveSessionForPairCode(pairCode)) {
+    const queue = getCleanWaitingQueue(pairCode);
+    if (!queue.includes(socket.id)) queue.push(socket.id);
+    waitingByPairCode.set(pairCode, queue);
+    socket.data.paired = false;
+    socket.data.roomId = undefined;
+    socket.emit('room_full', { queued: true, queuedAt: Date.now() });
+    log('room_full_waiting', { socketId: socket.id, ...pairCodeMeta(pairCode) });
+    return;
+  }
+
   const queue = getCleanWaitingQueue(pairCode).filter((id) => id !== socket.id);
   const partnerId = queue.shift();
 
@@ -216,8 +252,8 @@ function enqueueOrPair(socket) {
 
   socket.data.paired = false;
   socket.data.roomId = undefined;
-  socket.emit('waiting_for_partner', { pairCode, queuedAt: Date.now() });
-  log('waiting_for_partner', { socketId: socket.id, pairCode });
+  socket.emit('waiting_for_partner', { queuedAt: Date.now() });
+  log('waiting_for_partner', { socketId: socket.id, ...pairCodeMeta(pairCode) });
 }
 
 function isRateLimited(socket, eventName, windowMs, maxCount) {
@@ -232,7 +268,15 @@ function isRateLimited(socket, eventName, windowMs, maxCount) {
 
   bucket.count += 1;
   socket.data.rateLimits[eventName] = bucket;
-  return bucket.count > maxCount;
+  if (bucket.count <= maxCount) return false;
+
+  socket.emit('rate_limited', {
+    event: eventName,
+    retryAfterMs: Math.max(0, windowMs - (now - bucket.start))
+  });
+
+  log('rate_limited', { socketId: socket.id, event: eventName });
+  return true;
 }
 
 function emitToPartner(socket, eventName, payload) {
@@ -252,7 +296,13 @@ function emitToPartner(socket, eventName, payload) {
 }
 
 function handlePetMove(socket, payload = {}) {
-  if (isRateLimited(socket, 'pet_move', 1000, 40)) return;
+  const limit = RATE_LIMITS.pet_move;
+  if (isRateLimited(socket, 'pet_move', limit.windowMs, limit.maxCount)) return;
+
+  if (!isPlainObject(payload)) {
+    socket.emit('payload_error', { event: 'pet_move', error: 'invalid_payload' });
+    return;
+  }
 
   const x = clampNumber(payload.x, 0, 100);
   const y = clampNumber(payload.y, 0, 100);
@@ -269,8 +319,15 @@ function handlePetMove(socket, payload = {}) {
 }
 
 function handleSendMessage(socket, payload = {}) {
-  if (isRateLimited(socket, 'send_msg', 5000, 12)) return;
+  const limit = RATE_LIMITS.send_msg;
+  if (isRateLimited(socket, 'send_msg', limit.windowMs, limit.maxCount)) return;
 
+  if (!isPlainObject(payload)) {
+    socket.emit('payload_error', { event: 'send_msg', error: 'invalid_payload' });
+    return;
+  }
+
+  // User text is forwarded as text only. Never log message content.
   const text = safeString(payload.text, MAX_MESSAGE_LENGTH);
   if (!text) return;
 
@@ -285,7 +342,7 @@ function sanitizeActionToken(value, maxLength = 40) {
 }
 
 function sanitizeActionMeta(meta) {
-  if (typeof meta !== 'object' || meta === null) return undefined;
+  if (!isPlainObject(meta)) return undefined;
 
   const clean = {};
 
@@ -305,7 +362,13 @@ function sanitizeActionMeta(meta) {
 }
 
 function handlePetAction(socket, payload = {}) {
-  if (isRateLimited(socket, 'pet_action', 1000, 15)) return;
+  const limit = RATE_LIMITS.pet_action;
+  if (isRateLimited(socket, 'pet_action', limit.windowMs, limit.maxCount)) return;
+
+  if (!isPlainObject(payload)) {
+    socket.emit('payload_error', { event: 'pet_action', error: 'invalid_payload' });
+    return;
+  }
 
   const action = sanitizeActionToken(payload.action, 40);
   if (!action) {
@@ -354,11 +417,21 @@ function cleanupSessionFor(socket, reason) {
     }
   }
 
-  log('session_cleaned', { roomId, pairCode, reason });
+  log('session_cleaned', { roomId, ...pairCodeMeta(pairCode), reason });
 }
 
 io.on('connection', (socket) => {
   const pairCode = normalizePairCode(socket.handshake.auth?.pairCode || socket.handshake.query?.pairCode);
+
+  if (!isAccessAuthorized(socket)) {
+    log('unauthorized_client', {
+      socketId: socket.id,
+      origin: socket.handshake.headers.origin || null
+    });
+    socket.emit('auth_error', { code: 'auth_error', message: 'Invalid server access key.' });
+    socket.disconnect(true);
+    return;
+  }
 
   socket.data.pairCode = pairCode;
   socket.data.connectedAt = Date.now();
@@ -368,14 +441,14 @@ io.on('connection', (socket) => {
   socket.emit('server_hello', {
     socketId: socket.id,
     serverName: SERVER_NAME,
-    pairCode,
+    pairCodeHash: pairCodeMeta(pairCode).pairCodeHash,
     protocolVersion: 2,
     time: Date.now()
   });
 
   log('client_connected', {
     socketId: socket.id,
-    pairCode,
+    ...pairCodeMeta(pairCode),
     transport: socket.conn.transport.name,
     recovered: socket.recovered === true
   });
@@ -392,12 +465,12 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', (reason) => {
     removeFromWaiting(socket.id, pairCode);
-    log('client_disconnected', { socketId: socket.id, pairCode, reason });
+    log('client_disconnected', { socketId: socket.id, ...pairCodeMeta(pairCode), reason });
   });
 });
 
-httpServer.listen(PORT, () => {
-  log('server_started', { port: PORT, env: NODE_ENV, allowedOrigins: ALLOWED_ORIGINS, accessKeyRequired: SERVER_ACCESS_KEY.length > 0 });
+httpServer.listen(PORT, HOST, () => {
+  log('server_started', { host: HOST, port: PORT, env: NODE_ENV, allowedOrigins: ALLOWED_ORIGINS, accessKeyRequired: SERVER_ACCESS_KEY.length > 0 });
 });
 
 function shutdown(signal) {

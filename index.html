@@ -50,44 +50,78 @@
     }
 
     .room {
+      --room-shell-opacity: 1;
+      --pet-scale: 1;
       position: absolute;
-      min-width: 380px;
+      min-width: min(380px, calc(100vw - 32px));
       min-height: 340px;
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: var(--room-radius);
       box-shadow: var(--shadow), 0 0 0 1px var(--status-glow), 0 0 26px var(--status-glow);
-      backdrop-filter: blur(20px) saturate(1.1);
-      -webkit-backdrop-filter: blur(20px) saturate(1.1);
       contain: layout paint;
       transition: border-color 180ms ease, box-shadow 180ms ease, background 360ms ease, color 360ms ease;
     }
 
-    .room[data-theme="day"] {
+    .room-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      opacity: var(--room-shell-opacity);
+      pointer-events: none;
+      background-size: cover;
+      background-position: center;
+      backdrop-filter: blur(20px) saturate(1.1);
+      -webkit-backdrop-filter: blur(20px) saturate(1.1);
+      transition: opacity 160ms ease, background 360ms ease;
+    }
+
+    .room[data-shell-hidden="true"] {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    .room[data-theme="day"],
+    .room[data-theme="day"] .room-bg {
       --ink: rgba(64, 46, 35, 0.94);
       --muted: rgba(96, 76, 62, 0.72);
       --panel: rgba(255, 250, 242, 0.72);
       --panel-strong: rgba(255, 248, 238, 0.9);
       --line: rgba(129, 98, 71, 0.22);
       --shadow: 0 24px 80px rgba(54, 35, 20, 0.24);
+    }
+
+    .room[data-theme="day"] .room-bg {
       background:
         linear-gradient(180deg, rgba(255, 253, 248, 0.82), rgba(250, 226, 196, 0.66)),
         radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 0.9), transparent 32%),
         rgba(255, 244, 229, 0.72);
     }
 
-    .room[data-theme="night"] {
+    .room[data-theme="day"][data-custom-bg="true"] .room-bg {
+      background-image: var(--room-day-image);
+    }
+
+    .room[data-theme="night"],
+    .room[data-theme="night"] .room-bg {
       --ink: rgba(255, 249, 235, 0.94);
       --muted: rgba(235, 224, 210, 0.72);
       --panel: rgba(36, 36, 58, 0.58);
       --panel-strong: rgba(45, 45, 76, 0.84);
       --line: rgba(255, 242, 210, 0.18);
       --shadow: 0 24px 90px rgba(7, 10, 28, 0.42);
+    }
+
+    .room[data-theme="night"] .room-bg {
       background:
         radial-gradient(circle at 78% 18%, rgba(255, 244, 198, 0.82) 0 12px, transparent 13px),
         radial-gradient(circle at 22% 26%, rgba(178, 210, 255, 0.20), transparent 34%),
         linear-gradient(180deg, rgba(29, 36, 67, 0.84), rgba(63, 47, 83, 0.76)),
         rgba(25, 30, 58, 0.72);
+    }
+
+    .room[data-theme="night"][data-custom-bg="true"] .room-bg {
+      background-image: var(--room-night-image);
     }
 
     .room[data-connection="connected"] {
@@ -97,16 +131,35 @@
     }
 
     .room[data-connection="waiting"],
-    .room[data-connection="connecting"] {
+    .room[data-connection="connecting"],
+    .room[data-connection="reconnecting"],
+    .room[data-connection="room_full"],
+    .room[data-connection="partner_disconnected"] {
       --status-color: rgba(255, 190, 92, 0.96);
       --status-glow: rgba(255, 190, 92, 0.25);
       border-color: rgba(255, 190, 92, 0.56);
     }
 
-    .room[data-connection="disconnected"] {
+    .room[data-connection="disconnected"],
+    .room[data-connection="auth_error"],
+    .room[data-connection="invalid_url"] {
       --status-color: rgba(238, 91, 91, 0.96);
       --status-glow: rgba(238, 91, 91, 0.26);
       border-color: rgba(238, 91, 91, 0.58);
+    }
+
+    .room[data-connection="connected"] .connection-led {
+      animation: led-steady 2.4s ease-in-out infinite;
+    }
+
+    .room[data-connection="connecting"] .connection-led,
+    .room[data-connection="reconnecting"] .connection-led {
+      animation: led-search 1s ease-in-out infinite;
+    }
+
+    .room[data-connection="auth_error"] .connection-led,
+    .room[data-connection="invalid_url"] .connection-led {
+      animation: led-warning 1.8s ease-in-out infinite;
     }
 
 
@@ -135,6 +188,7 @@
         linear-gradient(180deg, rgba(255,255,255,0.12) 1px, transparent 1px) 0 0 / 32px 32px;
       opacity: 0.5;
       pointer-events: none;
+      transition: opacity 160ms ease;
     }
 
     .room[data-theme="night"]::before {
@@ -156,6 +210,8 @@
         repeating-linear-gradient(90deg, rgba(141, 96, 54, 0.20) 0 42px, rgba(255, 255, 255, 0.16) 42px 44px),
         linear-gradient(180deg, rgba(185, 133, 80, 0.22), rgba(112, 74, 43, 0.22));
       pointer-events: none;
+      opacity: var(--room-shell-opacity);
+      transition: opacity 160ms ease;
     }
 
     .room[data-theme="night"]::after {
@@ -188,6 +244,22 @@
       cursor: grabbing;
     }
 
+    .room::before,
+    .room-topbar,
+    .mini-window,
+    .shelf,
+    .plant,
+    .rug,
+    .message-panel,
+    .resize-handle {
+      opacity: var(--room-shell-opacity);
+      transition: opacity 160ms ease;
+    }
+
+    .room[data-shell-hidden="true"] .settings-panel {
+      opacity: 1;
+    }
+
     .room-title {
       margin: 0;
       font-size: 15px;
@@ -208,6 +280,13 @@
       justify-content: flex-end;
       gap: 8px;
       min-width: 0;
+    }
+
+    .window-controls {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
     }
 
     .connection-pill,
@@ -306,6 +385,19 @@
       font-size: 18px;
     }
 
+    .window-button {
+      width: 30px;
+      height: 30px;
+      font-size: 14px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .window-button.close-button:hover {
+      border-color: rgba(205, 58, 58, 0.42);
+      background: rgba(255, 100, 100, 0.22);
+    }
+
     .settings-panel {
       position: absolute;
       z-index: 35;
@@ -322,6 +414,72 @@
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       color: var(--ink);
+    }
+
+    .setup-panel {
+      position: absolute;
+      z-index: 34;
+      top: 82px;
+      left: 18px;
+      width: min(330px, calc(100% - 36px));
+      max-height: calc(100% - 112px);
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid rgba(111, 82, 59, 0.18);
+      border-radius: 20px;
+      background: rgba(255, 252, 247, 0.88);
+      box-shadow: 0 18px 50px rgba(54, 35, 20, 0.16);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      color: var(--ink);
+    }
+
+    .room[data-theme="night"] .setup-panel {
+      border-color: rgba(255, 242, 210, 0.16);
+      background: rgba(34, 35, 64, 0.9);
+      box-shadow: 0 18px 50px rgba(5, 8, 24, 0.28);
+    }
+
+    .setup-title {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .setup-steps {
+      margin: 8px 0 12px;
+      padding-left: 20px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .setup-status {
+      min-height: 22px;
+      margin: 8px 0;
+      padding: 7px 9px;
+      border: 1px solid rgba(111, 82, 59, 0.14);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.42);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .room[data-theme="night"] .setup-status {
+      border-color: rgba(255, 242, 210, 0.13);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .setup-warning {
+      margin: 8px 0;
+      padding: 7px 9px;
+      border: 1px solid rgba(255, 190, 92, 0.46);
+      border-radius: 12px;
+      background: rgba(255, 226, 158, 0.24);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
     }
 
     .room[data-theme="night"] .settings-panel {
@@ -390,6 +548,21 @@
       color: var(--ink);
       background: rgba(255, 255, 255, 0.60);
       user-select: text;
+    }
+
+    .settings-range,
+    .settings-file {
+      width: 100%;
+      min-height: 34px;
+      accent-color: rgba(94, 120, 190, 0.95);
+      user-select: text;
+    }
+
+    .settings-value {
+      justify-self: end;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
     }
 
     .room[data-theme="night"] .settings-input {
@@ -534,7 +707,7 @@
       outline: none;
       user-select: none;
       touch-action: none;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -50%) scale(var(--pet-scale));
       transform-origin: 50% 70%;
       animation: pet-breathe 4s ease-in-out infinite;
       transition: left 420ms cubic-bezier(0.2, 0.82, 0.2, 1), top 420ms cubic-bezier(0.2, 0.82, 0.2, 1), filter 260ms ease, opacity 260ms ease;
@@ -894,6 +1067,22 @@
       50% { opacity: 1; transform: scale(1.1); }
     }
 
+    @keyframes led-steady {
+      0%, 100% { opacity: 0.78; transform: scale(0.96); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+
+    @keyframes led-search {
+      0%, 100% { opacity: 0.42; transform: scale(0.82); }
+      35% { opacity: 1; transform: scale(1.12); }
+      70% { opacity: 0.62; transform: scale(0.94); }
+    }
+
+    @keyframes led-warning {
+      0%, 78%, 100% { opacity: 0.5; transform: scale(0.86); }
+      16%, 32% { opacity: 1; transform: scale(1.08); }
+    }
+
     @media (max-width: 600px) {
       .time-pill,
       .power-pill {
@@ -938,6 +1127,7 @@
 <body>
   <div id="canvas">
     <section id="room" class="room" data-theme="day" data-connection="disconnected" data-power="active" aria-label="Pet room">
+      <div class="room-bg" aria-hidden="true"></div>
       <header id="dragHandle" class="room-topbar" data-i18n-title="dragHint">
         <div>
           <h1 class="room-title" data-i18n="roomTitle">暖暖小房間</h1>
@@ -958,6 +1148,11 @@
             <span id="powerModeText">正常</span>
           </div>
           <button id="settingsButton" class="icon-button" type="button" data-i18n-title="settingsTooltip" data-i18n-aria-label="settingsTooltip">⚙</button>
+          <div class="window-controls" aria-label="Window controls">
+            <button id="minimizeWindowButton" class="icon-button window-button" type="button" data-i18n-title="minimizeWindow" data-i18n-aria-label="minimizeWindow">_</button>
+            <button id="maximizeRoomButton" class="icon-button window-button" type="button" data-i18n-title="maximizeRoom" data-i18n-aria-label="maximizeRoom">□</button>
+            <button id="closeWindowButton" class="icon-button window-button close-button" type="button" data-i18n-title="closeWindow" data-i18n-aria-label="closeWindow">×</button>
+          </div>
         </div>
       </header>
 
@@ -975,6 +1170,7 @@
         <div class="settings-field">
           <label class="settings-label" for="serverUrlInput" data-i18n="serverUrlLabel">伺服器網址</label>
           <input id="serverUrlInput" class="settings-input" type="url" autocomplete="off" spellcheck="false" placeholder="http://localhost:3000" />
+          <p id="serverUrlHelper" class="setup-status"></p>
         </div>
 
         <div class="settings-field">
@@ -1004,6 +1200,32 @@
           <button id="savePetTextButton" class="plain-button" type="button" data-i18n="savePetText">儲存泡泡文字</button>
         </div>
 
+        <div class="settings-field">
+          <label class="settings-label" for="roomOpacityInput" data-i18n="roomOpacityLabel">Room opacity</label>
+          <input id="roomOpacityInput" class="settings-range" type="range" min="0" max="100" step="5" />
+          <span id="roomOpacityValue" class="settings-value">100%</span>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="petScaleInput" data-i18n="petScaleLabel">Pet scale</label>
+          <input id="petScaleInput" class="settings-range" type="range" min="70" max="180" step="5" />
+          <span id="petScaleValue" class="settings-value">100%</span>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="dayBackgroundInput" data-i18n="dayBackgroundLabel">Day background</label>
+          <input id="dayBackgroundInput" class="settings-file" type="file" accept="image/*" />
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label" for="nightBackgroundInput" data-i18n="nightBackgroundLabel">Night background</label>
+          <input id="nightBackgroundInput" class="settings-file" type="file" accept="image/*" />
+        </div>
+
+        <div class="settings-actions three">
+          <button id="resetAppearanceButton" class="plain-button" type="button" data-i18n="resetAppearance">Reset appearance</button>
+        </div>
+
         <p class="settings-copy" data-i18n="connectionHint">兩台電腦使用相同伺服器網址與配對代碼，就會進入同一個私人房間。</p>
 
         <div class="settings-actions three">
@@ -1017,6 +1239,46 @@
       </aside>
 
       <main class="room-content">
+        <section id="setupPanel" class="setup-panel" hidden aria-live="polite">
+          <h2 class="setup-title" data-i18n="setupTitle">第一次設定</h2>
+          <p class="settings-copy" data-i18n="setupIntro">用同一個伺服器網址和配對碼，就能和另一台電腦連在一起。</p>
+          <ol class="setup-steps">
+            <li data-i18n="setupStepServer">輸入 Server URL</li>
+            <li data-i18n="setupStepPair">產生或輸入 Pair Code</li>
+            <li data-i18n="setupStepShare">把 Pair Code 分享給夥伴</li>
+            <li data-i18n="setupStepAccess">只有伺服器要求時才輸入 Access Key</li>
+          </ol>
+
+          <div class="settings-field">
+            <label class="settings-label" for="setupServerUrlInput" data-i18n="serverUrlLabel">伺服器網址</label>
+            <input id="setupServerUrlInput" class="settings-input" type="url" autocomplete="off" spellcheck="false" placeholder="https://your-server.onrender.com" />
+            <p id="setupServerUrlHelper" class="setup-status"></p>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="setupPairCodeInput" data-i18n="pairCodeLabel">配對代碼</label>
+            <input id="setupPairCodeInput" class="settings-input" type="text" autocomplete="off" spellcheck="false" placeholder="neko-2026" />
+          </div>
+
+          <div class="settings-actions">
+            <button id="generatePairCodeButton" class="plain-button" type="button" data-i18n="generatePairCode">產生配對碼</button>
+            <button id="copyPairCodeButton" class="plain-button" type="button" data-i18n="copyPairCode">複製配對碼</button>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="setupAccessKeyInput" data-i18n="accessKeyLabel">伺服器通行金鑰（選填）</label>
+            <input id="setupAccessKeyInput" class="settings-input" type="password" autocomplete="off" spellcheck="false" data-i18n-placeholder="accessKeyPlaceholder" />
+          </div>
+
+          <p id="setupWarning" class="setup-warning" hidden data-i18n="localhostWarning">目前的伺服器網址只適合本機測試。不同 Wi-Fi 或不同國家需要公開 HTTPS 伺服器。</p>
+          <p id="setupStatus" class="setup-status" data-i18n="setupStatusReady">準備好後按下套用並連線。</p>
+
+          <div class="settings-actions">
+            <button id="setupApplyButton" class="plain-button" type="button" data-i18n="setupApplyConnect">套用並連線</button>
+            <button id="setupLaterButton" class="plain-button" type="button" data-i18n="setupLater">稍後設定</button>
+          </div>
+        </section>
+
         <div class="mini-window" aria-hidden="true"></div>
         <div class="shelf" aria-hidden="true"></div>
         <div class="plant" aria-hidden="true"></div>
@@ -1043,7 +1305,7 @@
           </div>
           <div id="messageLog" class="message-log"></div>
           <form id="messageForm" class="message-form">
-            <input id="messageInput" class="message-input" type="text" autocomplete="off" data-i18n-placeholder="messagePlaceholder" />
+            <input id="messageInput" class="message-input" type="text" autocomplete="off" maxlength="600" data-i18n-placeholder="messagePlaceholder" />
             <button id="sendButton" class="send-button" type="submit" data-i18n="send">送出</button>
           </form>
         </section>
@@ -1061,6 +1323,7 @@
   </div>
 
   <script src="./node_modules/socket.io-client/dist/socket.io.min.js"></script>
+  <script src="./config.js"></script>
   <script src="./renderer.js"></script>
 </body>
 </html>

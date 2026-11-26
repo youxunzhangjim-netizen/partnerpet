@@ -11,11 +11,15 @@ services:
         value: 20
       - key: NODE_ENV
         value: production
+      - key: HOST
+        value: "0.0.0.0"
       - key: SERVER_NAME
         value: transparent-pet-room-bridge
       - key: CLIENT_ORIGINS
         value: "*"
       - key: MAX_MESSAGE_LENGTH
         value: "600"
+      - key: ACCESS_TOKEN
+        sync: false
       - key: SERVER_ACCESS_KEY
         sync: false

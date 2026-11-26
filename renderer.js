@@ -1,7 +1,28 @@
 const api = window.petRoomAPI ?? {
   setMousePassThrough: () => {},
+  minimize: () => {},
   quit: () => {}
 };
+
+function readConfigString(config, key, maxLength = 300) {
+  try {
+    if (!config || typeof config !== 'object' || typeof config[key] === 'undefined') return '';
+    return String(config[key]).replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, maxLength);
+  } catch {
+    return '';
+  }
+}
+
+const rawPetRoomConfig = window.PET_ROOM_CONFIG && typeof window.PET_ROOM_CONFIG === 'object'
+  ? window.PET_ROOM_CONFIG
+  : {};
+
+const appConfig = Object.freeze({
+  defaultServerUrl: readConfigString(rawPetRoomConfig, 'defaultServerUrl'),
+  defaultPairCode: readConfigString(rawPetRoomConfig, 'defaultPairCode', 64),
+  defaultAccessToken: readConfigString(rawPetRoomConfig, 'defaultAccessToken', 256),
+  appMode: readConfigString(rawPetRoomConfig, 'appMode', 40) || 'development'
+});
 
 const dictionary = {
   zh: {
@@ -98,6 +119,37 @@ const dictionary = {
     settingsTitle: 'Settings',
     languageHint: 'Switch the interface language. Messages update immediately.',
     close: 'Close',
+    setupTitle: 'First setup',
+    setupIntro: 'Use the same server URL and pair code to connect with another computer.',
+    setupStepServer: 'Enter Server URL',
+    setupStepPair: 'Generate or enter Pair Code',
+    setupStepShare: 'Share Pair Code with your partner',
+    setupStepAccess: 'Enter Access Key only if required',
+    generatePairCode: 'Generate Pair Code',
+    copyPairCode: 'Copy Pair Code',
+    setupApplyConnect: 'Apply and Connect',
+    setupLater: 'Set Up Later',
+    localhostWarning: 'This server URL only works for local testing. Different Wi-Fi or countries need a public HTTPS server.',
+    setupStatusReady: 'Press Apply and Connect when ready.',
+    setupStatusConnecting: 'Connecting and looking for your partner.',
+    setupStatusWaiting: 'Connected to the server. Waiting for your partner to use the same pair code.',
+    setupStatusPaired: 'Paired successfully.',
+    setupStatusAuthError: 'The server rejected the connection. Check the Access Key.',
+    setupStatusRoomFull: 'Two people are already connected with this pair code. You are queued for the next open spot.',
+    serverUrlEmpty: 'Enter a server URL. For real use, prefer a public HTTPS URL.',
+    serverUrlLocalhost: 'Only suitable for testing on the same computer.',
+    serverUrlLan: 'Usually only suitable on the same Wi-Fi.',
+    serverUrlPublicHttps: 'Works across different Wi-Fi / different networks.',
+    serverUrlPublicHttp: 'Can connect, but a public HTTPS server URL is recommended for real use.',
+    serverUrlInvalid: 'The server URL does not look valid.',
+    localhostRemoteWarning: 'Do not use localhost for different devices, different Wi-Fi, or another country.',
+    pairCodeGenerated: 'New pair code generated.',
+    pairCodeCopied: 'Pair code copied.',
+    pairCodeCopyFailed: 'Could not copy. Select the pair code manually.',
+    minimizeWindow: 'Minimize',
+    maximizeRoom: 'Maximize room',
+    restoreRoom: 'Restore room',
+    closeWindow: 'Close',
     resetRoom: 'Reset room',
     quit: 'Quit',
     dragHint: 'Drag here to move the room; drag edges or corners to resize',
@@ -139,6 +191,8 @@ const dictionary = {
     connectionWaiting: 'Waiting',
     connectionDisconnected: 'Offline',
     connectionReconnecting: 'Reconnecting…',
+    connectionAuthError: 'Access denied',
+    connectionRoomFull: 'Room full',
     socketClientMissing: 'socket.io-client was not found. Run npm install in the project root first.',
     connectingToServer: 'Connecting to the sync server.',
     connectionConnectedMessage: 'Connected to the server. Looking for a pair.',
@@ -164,6 +218,14 @@ const dictionary = {
     shockedTextEnLabel: 'Shocked bubble (English)',
     shockedTextHint: 'Your pet uses this text when poked. Leave it empty to use the bilingual default.',
     savePetText: 'Save bubble text',
+    roomOpacityLabel: 'Room opacity',
+    petScaleLabel: 'Pet scale',
+    dayBackgroundLabel: 'Day background',
+    nightBackgroundLabel: 'Night background',
+    resetAppearance: 'Reset appearance',
+    appearanceReset: 'Appearance settings reset.',
+    backgroundSaved: 'Background image saved locally.',
+    backgroundTooLarge: 'That image is too large. Choose a smaller file.',
     powerModeTooltip: 'Background power-saving status',
     powerModeActive: 'Normal',
     powerModeLow: 'Eco',
@@ -180,20 +242,92 @@ const dictionary = {
   }
 };
 
+Object.assign(dictionary.zh, {
+  setupTitle: '第一次設定',
+  setupIntro: '用同一個伺服器網址和配對碼，就能和另一台電腦連在一起。',
+  setupStepServer: '輸入 Server URL',
+  setupStepPair: '產生或輸入 Pair Code',
+  setupStepShare: '把 Pair Code 分享給夥伴',
+  setupStepAccess: '只有伺服器要求時才輸入 Access Key',
+  generatePairCode: '產生配對碼',
+  copyPairCode: '複製配對碼',
+  setupApplyConnect: '套用並連線',
+  setupLater: '稍後設定',
+  localhostWarning: '目前的伺服器網址只適合本機測試。不同 Wi-Fi 或不同國家需要公開 HTTPS 伺服器。',
+  setupStatusReady: '準備好後按下套用並連線。',
+  setupStatusConnecting: '正在連線並尋找夥伴。',
+  setupStatusWaiting: '已連上伺服器，正在等待夥伴輸入相同配對碼。',
+  setupStatusPaired: '已配對成功。',
+  setupStatusAuthError: '伺服器拒絕連線，請確認 Access Key。',
+  setupStatusRoomFull: '這個配對碼已有兩人連線；你會排隊等待空位。',
+  serverUrlEmpty: '請輸入伺服器網址。實際使用建議使用公開 HTTPS 網址。',
+  serverUrlLocalhost: '只適合在同一台電腦測試。',
+  serverUrlLan: '通常只適合同一個 Wi-Fi。',
+  serverUrlPublicHttps: '可用於不同 Wi-Fi / 不同網路。',
+  serverUrlPublicHttp: '可連線，但實際使用建議改用公開 HTTPS 伺服器網址。',
+  serverUrlInvalid: '伺服器網址格式看起來不正確。',
+  localhostRemoteWarning: '如果要和不同裝置、不同 Wi-Fi 或不同國家的夥伴連線，請不要使用 localhost。',
+  pairCodeGenerated: '已產生新的配對碼。',
+  pairCodeCopied: '配對碼已複製。',
+  pairCodeCopyFailed: '無法複製，請手動選取配對碼。',
+  connectionAuthError: '金鑰錯誤',
+  connectionRoomFull: '房間已滿',
+  connectionPaired: '已配對',
+  connectionPartnerDisconnected: '夥伴離線',
+  connectionInvalidUrl: '網址無效',
+  setupStatusPartnerDisconnected: '夥伴暫時離線；他回來後會自動重連。',
+  setupStatusInvalidUrl: '請檢查伺服器網址，或改用公開 HTTPS 網址。',
+  rateLimited: '動作太密集了，稍等一下再試。',
+  payloadRejected: '伺服器拒絕了一個不正確的同步資料。'
+});
+
+Object.assign(dictionary.en, {
+  connectionPaired: 'Paired',
+  connectionPartnerDisconnected: 'Partner offline',
+  connectionInvalidUrl: 'Invalid URL',
+  setupStatusPartnerDisconnected: 'Your partner is offline for now. This app will reconnect when they return.',
+  setupStatusInvalidUrl: 'Check the server URL, or use a public HTTPS URL for real remote pairing.',
+  rateLimited: 'That was a bit too fast. Try again in a moment.',
+  payloadRejected: 'The server rejected one invalid sync payload.'
+});
+
 const room = document.getElementById('room');
 const dragHandle = document.getElementById('dragHandle');
 const settingsButton = document.getElementById('settingsButton');
+const minimizeWindowButton = document.getElementById('minimizeWindowButton');
+const maximizeRoomButton = document.getElementById('maximizeRoomButton');
+const closeWindowButton = document.getElementById('closeWindowButton');
+const setupPanel = document.getElementById('setupPanel');
+const setupServerUrlInput = document.getElementById('setupServerUrlInput');
+const setupServerUrlHelper = document.getElementById('setupServerUrlHelper');
+const setupPairCodeInput = document.getElementById('setupPairCodeInput');
+const setupAccessKeyInput = document.getElementById('setupAccessKeyInput');
+const generatePairCodeButton = document.getElementById('generatePairCodeButton');
+const copyPairCodeButton = document.getElementById('copyPairCodeButton');
+const setupApplyButton = document.getElementById('setupApplyButton');
+const setupLaterButton = document.getElementById('setupLaterButton');
+const setupWarning = document.getElementById('setupWarning');
+const setupStatus = document.getElementById('setupStatus');
 const settingsPanel = document.getElementById('settingsPanel');
 const closeSettingsButton = document.getElementById('closeSettingsButton');
 const resetRoomButton = document.getElementById('resetRoomButton');
 const quitButton = document.getElementById('quitButton');
 const applyConnectionButton = document.getElementById('applyConnectionButton');
 const serverUrlInput = document.getElementById('serverUrlInput');
+const serverUrlHelper = document.getElementById('serverUrlHelper');
 const pairCodeInput = document.getElementById('pairCodeInput');
 const accessKeyInput = document.getElementById('accessKeyInput');
 const shockedTextZhInput = document.getElementById('shockedTextZhInput');
 const shockedTextEnInput = document.getElementById('shockedTextEnInput');
 const savePetTextButton = document.getElementById('savePetTextButton');
+const roomOpacityInput = document.getElementById('roomOpacityInput');
+const roomOpacityValue = document.getElementById('roomOpacityValue');
+const petScaleInput = document.getElementById('petScaleInput');
+const petScaleValue = document.getElementById('petScaleValue');
+const dayBackgroundInput = document.getElementById('dayBackgroundInput');
+const nightBackgroundInput = document.getElementById('nightBackgroundInput');
+const resetAppearanceButton = document.getElementById('resetAppearanceButton');
+const connectionStatus = document.getElementById('connectionStatus');
 const connectionText = document.getElementById('connectionText');
 const timeThemeText = document.getElementById('timeThemeText');
 const powerModeText = document.getElementById('powerModeText');
@@ -215,21 +349,28 @@ const LANG_STORAGE_KEY = 'transparent-pet-room:lang';
 const SERVER_URL_STORAGE_KEY = 'transparent-pet-room:server-url';
 const PAIR_CODE_STORAGE_KEY = 'transparent-pet-room:pair-code';
 const ACCESS_KEY_STORAGE_KEY = 'transparent-pet-room:bridge-access-key';
+const SETUP_DISMISSED_STORAGE_KEY = 'transparent-pet-room:setup-dismissed';
 const PET_POSITION_STORAGE_KEY = 'transparent-pet-room:pet-positions';
 const SHOCKED_TEXT_ZH_STORAGE_KEY = 'transparent-pet-room:shocked-text-zh';
 const SHOCKED_TEXT_EN_STORAGE_KEY = 'transparent-pet-room:shocked-text-en';
+const APPEARANCE_STORAGE_KEY = 'transparent-pet-room:appearance';
 const MIN_WIDTH = 380;
 const MIN_HEIGHT = 340;
 const SCREEN_MARGIN = 16;
-const DEFAULT_SERVER_URL = 'http://localhost:3000';
-const DEFAULT_PAIR_CODE = 'default';
-const DEFAULT_ACCESS_KEY = '';
+const DEFAULT_SERVER_URL = appConfig.defaultServerUrl;
+const DEFAULT_PAIR_CODE = sanitizePairCode(appConfig.defaultPairCode) || generatePairCode();
+const DEFAULT_ACCESS_KEY = appConfig.defaultAccessToken;
+const APP_MODE = appConfig.appMode;
 const SHOCKED_DURATION_MS = 3000;
 const BUBBLE_DEFAULT_DURATION_MS = 5000;
+const MAX_DISPLAY_MESSAGE_LENGTH = 600;
+const MAX_BUBBLE_TEXT_LENGTH = 260;
+const MAX_ACTION_TEXT_LENGTH = 80;
 const IDLE_AFTER_MS = 3 * 60 * 1000;
-const ACTIVE_THEME_CHECK_MS = 60 * 1000;
-const LOW_POWER_THEME_CHECK_MS = 5 * 60 * 1000;
+const ACTIVE_THEME_CHECK_MS = 5 * 60 * 1000;
+const LOW_POWER_THEME_CHECK_MS = 30 * 60 * 1000;
 const ACTIVITY_RESCHEDULE_THROTTLE_MS = 5000;
+const MAX_BACKGROUND_DATA_URL_LENGTH = 2_750_000;
 
 const PET_STATES = Object.freeze({
   IDLE: 'Idle',
@@ -254,24 +395,42 @@ let currentLang = localStorage.getItem(LANG_STORAGE_KEY) || 'zh';
 let serverUrl = localStorage.getItem(SERVER_URL_STORAGE_KEY) || DEFAULT_SERVER_URL;
 let pairCode = localStorage.getItem(PAIR_CODE_STORAGE_KEY) || DEFAULT_PAIR_CODE;
 let accessKey = localStorage.getItem(ACCESS_KEY_STORAGE_KEY) || DEFAULT_ACCESS_KEY;
+let setupDismissed = localStorage.getItem(SETUP_DISMISSED_STORAGE_KEY) === 'true';
 let connectionState = 'disconnected';
+let isPaired = false;
+let authRetryBlocked = false;
 let currentTimeTheme = 'day';
 let powerMode = 'active';
 let socket = null;
-let lastPassThrough = null;
+let lastPassThrough = true;
 let action = null;
 let box = loadBox();
+let restoreBox = null;
+let isRoomMaximized = false;
 let petPositions = loadPetPositions();
+let appearance = loadAppearance();
 let lastThemeMessage = null;
 let lastActivityAt = Date.now();
 let lastActivityScheduleAt = 0;
 let idleTimer = null;
 let themeTimer = null;
+let petPositionFrame = 0;
+let passThroughFrame = 0;
+let partnerPetMoveFrame = 0;
+let shouldSavePetPositionsAfterFrame = false;
+let pendingPassThroughPoint = null;
+let pendingPartnerPetPosition = null;
 let pointerInsideRoom = false;
 let lastPointerPoint = { x: -99999, y: -99999 };
 let forceInteractiveUntil = 0;
+let suppressPartnerClick = false;
+let lastReconnectCheckAt = 0;
 const bubbleTimers = new Map();
 const customShockedText = loadShockedTexts();
+
+if (!localStorage.getItem(PAIR_CODE_STORAGE_KEY) && pairCode) {
+  localStorage.setItem(PAIR_CODE_STORAGE_KEY, pairCode);
+}
 const petState = {
   me: { current: PET_STATES.IDLE, timer: null },
   partner: { current: PET_STATES.IDLE, timer: null }
@@ -289,11 +448,143 @@ function t(key) {
 }
 
 function format(key, values = {}) {
-  return t(key).replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, token) => values[token] ?? '');
+  return t(key).replace(/\{([a-zA-Z0-9_]+)\}/g, (_match, token) => sanitizeDisplayText(values[token] ?? '', 160));
 }
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function setInputValueIfChanged(input, value) {
+  const nextValue = String(value ?? '');
+  if (input && input.value !== nextValue) {
+    input.value = nextValue;
+  }
+}
+
+function sanitizeDisplayText(value, maxLength = MAX_DISPLAY_MESSAGE_LENGTH) {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
+
+function sanitizePairCode(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .toLowerCase()
+    .slice(0, 64);
+}
+
+function normalizePairCodeInput(value) {
+  return sanitizePairCode(value) || DEFAULT_PAIR_CODE || generatePairCode();
+}
+
+function sanitizeActionName(value) {
+  return sanitizeDisplayText(value, MAX_ACTION_TEXT_LENGTH).replace(/[^a-zA-Z0-9_:-]/g, '');
+}
+
+function generatePairCode() {
+  const bytes = new Uint8Array(4);
+  crypto.getRandomValues(bytes);
+  return `pet-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function parseIPv4(hostname) {
+  const parts = String(hostname || '').split('.');
+  if (parts.length !== 4) return null;
+  const numbers = parts.map((part) => Number(part));
+  return numbers.every((part) => Number.isInteger(part) && part >= 0 && part <= 255) ? numbers : null;
+}
+
+function isLanIPv4(parts) {
+  if (!parts) return false;
+  if (parts[0] === 10) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31;
+}
+
+function getServerUrlKind(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return 'empty';
+
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+    const ipv4 = parseIPv4(hostname);
+
+    if (hostname === 'localhost' || hostname === '0.0.0.0' || hostname === '127.0.0.1' || hostname.endsWith('.localhost')) {
+      return 'localhost';
+    }
+
+    if (isLanIPv4(ipv4)) {
+      return 'lan';
+    }
+
+    if (url.protocol === 'https:') {
+      return 'public_https';
+    }
+
+    if (url.protocol === 'http:') {
+      return 'public_http';
+    }
+
+    return 'invalid';
+  } catch {
+    return 'invalid';
+  }
+}
+
+function serverUrlHelperKey(kind) {
+  if (kind === 'empty') return 'serverUrlEmpty';
+  if (kind === 'localhost') return 'serverUrlLocalhost';
+  if (kind === 'lan') return 'serverUrlLan';
+  if (kind === 'public_https') return 'serverUrlPublicHttps';
+  if (kind === 'public_http') return 'serverUrlPublicHttp';
+  return 'serverUrlInvalid';
+}
+
+function canAttemptServerConnection(kind) {
+  return kind === 'localhost' || kind === 'lan' || kind === 'public_https' || kind === 'public_http';
+}
+
+function updateServerUrlHelpers() {
+  const setupKind = getServerUrlKind(setupServerUrlInput.value || serverUrl);
+  const settingsKind = getServerUrlKind(serverUrlInput.value || serverUrl);
+
+  setupServerUrlHelper.textContent = t(serverUrlHelperKey(setupKind));
+  serverUrlHelper.textContent = t(serverUrlHelperKey(settingsKind));
+
+  const setupIsLocalhost = setupKind === 'empty' || setupKind === 'localhost';
+  setupWarning.hidden = !setupIsLocalhost;
+  setupWarning.textContent = setupKind === 'localhost' ? t('localhostRemoteWarning') : t('serverUrlEmpty');
+}
+
+function setupStatusKey() {
+  if (connectionState === 'auth_error') return 'setupStatusAuthError';
+  if (connectionState === 'room_full') return 'setupStatusRoomFull';
+  if (connectionState === 'invalid_url') return 'setupStatusInvalidUrl';
+  if (connectionState === 'partner_disconnected') return 'setupStatusPartnerDisconnected';
+  if (connectionState === 'waiting') return 'setupStatusWaiting';
+  if (connectionState === 'connecting' || connectionState === 'reconnecting') return 'setupStatusConnecting';
+  if (isPaired) return 'setupStatusPaired';
+  return 'setupStatusReady';
+}
+
+function updateSetupPanel() {
+  setupPanel.hidden = setupDismissed || isPaired;
+  setupStatus.textContent = t(setupStatusKey());
+  updateServerUrlHelpers();
+}
+
+function applySetupInputs() {
+  setInputValueIfChanged(setupServerUrlInput, serverUrl);
+  setInputValueIfChanged(setupPairCodeInput, pairCode);
+  setInputValueIfChanged(setupAccessKeyInput, accessKey);
+  updateSetupPanel();
 }
 
 function getDefaultBox() {
@@ -361,16 +652,114 @@ function loadShockedTexts() {
   };
 }
 
+function loadAppearance() {
+  const fallback = {
+    roomOpacity: 100,
+    petScale: 100,
+    dayBackground: '',
+    nightBackground: ''
+  };
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(APPEARANCE_STORAGE_KEY));
+    return {
+      roomOpacity: clamp(Number(saved?.roomOpacity ?? fallback.roomOpacity), 0, 100),
+      petScale: clamp(Number(saved?.petScale ?? fallback.petScale), 70, 180),
+      dayBackground: typeof saved?.dayBackground === 'string' ? saved.dayBackground : '',
+      nightBackground: typeof saved?.nightBackground === 'string' ? saved.nightBackground : ''
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function saveAppearance() {
+  localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify(appearance));
+}
+
+function cssUrl(value) {
+  return `url("${String(value).replace(/"/g, '\\"')}")`;
+}
+
+function applyAppearance() {
+  const opacity = clamp(Number(appearance.roomOpacity), 0, 100);
+  const scale = clamp(Number(appearance.petScale), 70, 180);
+
+  room.style.setProperty('--room-shell-opacity', String(opacity / 100));
+  room.style.setProperty('--pet-scale', String(scale / 100));
+  room.dataset.shellHidden = opacity === 0 ? 'true' : 'false';
+
+  if (appearance.dayBackground) {
+    room.style.setProperty('--room-day-image', cssUrl(appearance.dayBackground));
+  } else {
+    room.style.removeProperty('--room-day-image');
+  }
+
+  if (appearance.nightBackground) {
+    room.style.setProperty('--room-night-image', cssUrl(appearance.nightBackground));
+  } else {
+    room.style.removeProperty('--room-night-image');
+  }
+
+  const hasCustomImage = currentTimeTheme === 'night' ? Boolean(appearance.nightBackground) : Boolean(appearance.dayBackground);
+  room.dataset.customBg = hasCustomImage ? 'true' : 'false';
+
+  setInputValueIfChanged(roomOpacityInput, opacity);
+  roomOpacityValue.textContent = `${opacity}%`;
+  setInputValueIfChanged(petScaleInput, scale);
+  petScaleValue.textContent = `${scale}%`;
+
+  schedulePetPositionRefresh();
+}
+
+function readImageFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result || '')));
+    reader.addEventListener('error', () => reject(reader.error || new Error('file_read_failed')));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleBackgroundUpload(theme, input) {
+  markActivity(`${theme}-background`, { force: true });
+  const file = input.files?.[0];
+  if (!file) return;
+
+  try {
+    const dataUrl = await readImageFileAsDataUrl(file);
+
+    if (!dataUrl.startsWith('data:image/') || dataUrl.length > MAX_BACKGROUND_DATA_URL_LENGTH) {
+      input.value = '';
+      pushMessage('system', { key: 'backgroundTooLarge' });
+      return;
+    }
+
+    if (theme === 'night') {
+      appearance.nightBackground = dataUrl;
+    } else {
+      appearance.dayBackground = dataUrl;
+    }
+
+    applyAppearance();
+    saveAppearance();
+    pushMessage('system', { key: 'backgroundSaved' });
+  } catch {
+    input.value = '';
+    pushMessage('system', { key: 'backgroundTooLarge' });
+  }
+}
+
 function saveShockedTexts() {
-  customShockedText.zh = shockedTextZhInput.value.trim().slice(0, 80);
-  customShockedText.en = shockedTextEnInput.value.trim().slice(0, 80);
+  customShockedText.zh = sanitizeDisplayText(shockedTextZhInput.value, 80);
+  customShockedText.en = sanitizeDisplayText(shockedTextEnInput.value, 80);
   localStorage.setItem(SHOCKED_TEXT_ZH_STORAGE_KEY, customShockedText.zh);
   localStorage.setItem(SHOCKED_TEXT_EN_STORAGE_KEY, customShockedText.en);
 }
 
 function applyPetTextInputs() {
-  shockedTextZhInput.value = customShockedText.zh;
-  shockedTextEnInput.value = customShockedText.en;
+  setInputValueIfChanged(shockedTextZhInput, customShockedText.zh);
+  setInputValueIfChanged(shockedTextEnInput, customShockedText.en);
   shockedTextZhInput.placeholder = dictionary.zh.shockedBubbleDefault;
   shockedTextEnInput.placeholder = dictionary.en.shockedBubbleDefault;
 }
@@ -459,6 +848,33 @@ function applyPetPositions() {
   petPositions.partner = positionPetElement(petPartner, petPositions.partner);
 }
 
+function schedulePetPositionRefresh({ save = false } = {}) {
+  shouldSavePetPositionsAfterFrame = shouldSavePetPositionsAfterFrame || save;
+  if (petPositionFrame) return;
+
+  petPositionFrame = requestAnimationFrame(() => {
+    petPositionFrame = 0;
+    applyPetPositions();
+    if (shouldSavePetPositionsAfterFrame) {
+      shouldSavePetPositionsAfterFrame = false;
+      savePetPositions();
+    }
+  });
+}
+
+function schedulePartnerPetPosition(position) {
+  pendingPartnerPetPosition = position;
+  if (partnerPetMoveFrame) return;
+
+  partnerPetMoveFrame = requestAnimationFrame(() => {
+    partnerPetMoveFrame = 0;
+    if (!pendingPartnerPetPosition) return;
+    setPetWalkThenIdle('partner', 900);
+    petPositions.partner = positionPetElement(petPartner, pendingPartnerPetPosition);
+    pendingPartnerPetPosition = null;
+  });
+}
+
 function emitMyPetPosition({ quiet = false } = {}) {
   const payload = {
     x: Number(petPositions.me.x.toFixed(3)),
@@ -476,10 +892,10 @@ function emitMyPetPosition({ quiet = false } = {}) {
 function showPetBubble(target, text, { duration = BUBBLE_DEFAULT_DURATION_MS } = {}) {
   const element = target === 'partner' ? petPartner : petMe;
   const bubble = target === 'partner' ? petPartnerBubble : petMeBubble;
-  const cleanText = String(text || '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const cleanText = sanitizeDisplayText(text, MAX_BUBBLE_TEXT_LENGTH);
   if (!cleanText) return;
 
-  bubble.textContent = cleanText.slice(0, 260);
+  bubble.textContent = cleanText;
   updateBubblePlacement(element, target === 'partner' ? petPositions.partner : petPositions.me);
   bubble.classList.add('is-visible');
 
@@ -569,7 +985,7 @@ function triggerMyShockedReaction({ sendAck = true } = {}) {
 }
 
 function triggerPartnerShockedPreview(text, { duration = SHOCKED_DURATION_MS } = {}) {
-  const cleanText = String(text || t('shockedBubbleDefault')).trim().slice(0, 120);
+  const cleanText = sanitizeDisplayText(text || t('shockedBubbleDefault'), 120);
   setPetState('partner', PET_STATES.SHOCKED, { duration, force: true });
   popPet(petPartner);
   showPetBubble('partner', cleanText, { duration });
@@ -665,16 +1081,67 @@ function updateMousePassThroughForPoint(x, y) {
   }
 
   const inside = isPointInsideRoom(x, y);
-  if (inside !== pointerInsideRoom || lastPassThrough === null) {
+  if (inside !== pointerInsideRoom) {
     pointerInsideRoom = inside;
     setMousePassThrough(!inside);
   }
 }
 
+function scheduleMousePassThroughForPoint(x, y) {
+  pendingPassThroughPoint = { x, y };
+  if (passThroughFrame) return;
+
+  passThroughFrame = requestAnimationFrame(() => {
+    passThroughFrame = 0;
+    if (!pendingPassThroughPoint) return;
+    const point = pendingPassThroughPoint;
+    pendingPassThroughPoint = null;
+    updateMousePassThroughForPoint(point.x, point.y);
+  });
+}
+
 function resetBox() {
+  isRoomMaximized = false;
+  restoreBox = null;
   box = getDefaultBox();
   applyBox();
   saveBox();
+  updateMaximizeButton();
+}
+
+function getMaximizedBox() {
+  return {
+    x: SCREEN_MARGIN,
+    y: SCREEN_MARGIN,
+    width: window.innerWidth - SCREEN_MARGIN * 2,
+    height: window.innerHeight - SCREEN_MARGIN * 2
+  };
+}
+
+function updateMaximizeButton() {
+  const key = isRoomMaximized ? 'restoreRoom' : 'maximizeRoom';
+  maximizeRoomButton.textContent = isRoomMaximized ? '❐' : '□';
+  maximizeRoomButton.setAttribute('title', t(key));
+  maximizeRoomButton.setAttribute('aria-label', t(key));
+}
+
+function toggleRoomMaximize() {
+  markActivity('toggle-room-maximize', { force: true });
+
+  if (isRoomMaximized) {
+    box = restoreBox || getDefaultBox();
+    restoreBox = null;
+    isRoomMaximized = false;
+  } else {
+    restoreBox = { ...box };
+    box = getMaximizedBox();
+    isRoomMaximized = true;
+  }
+
+  applyBox();
+  applyPetPositions();
+  saveBox();
+  updateMaximizeButton();
 }
 
 function isPointInsideRoom(x, y) {
@@ -703,6 +1170,7 @@ function updateTimeTheme({ announce = false } = {}) {
   currentTimeTheme = nextTheme;
   room.dataset.theme = currentTimeTheme;
   document.body.dataset.theme = currentTimeTheme;
+  applyAppearance();
   updateTimeThemeText();
 
   if (announce) {
@@ -719,7 +1187,12 @@ function updateTimeThemeText() {
 }
 
 function connectionTextKey() {
+  if (connectionState === 'auth_error') return 'connectionAuthError';
+  if (connectionState === 'room_full') return 'connectionRoomFull';
+  if (connectionState === 'invalid_url') return 'connectionInvalidUrl';
+  if (connectionState === 'partner_disconnected') return 'connectionPartnerDisconnected';
   if (connectionState === 'connected') return 'connectionConnected';
+  if (connectionState === 'paired') return 'connectionPaired';
   if (connectionState === 'waiting') return 'connectionWaiting';
   if (connectionState === 'connecting') return 'connectionConnecting';
   if (connectionState === 'reconnecting') return 'connectionReconnecting';
@@ -728,20 +1201,30 @@ function connectionTextKey() {
 
 function setConnectionState(nextState) {
   connectionState = nextState;
-  room.dataset.connection = ['connected', 'waiting', 'connecting', 'reconnecting', 'disconnected'].includes(nextState)
-    ? nextState
-    : 'disconnected';
+  if (nextState === 'paired' || nextState === 'connected') {
+    room.dataset.connection = 'connected';
+  } else if (nextState === 'waiting' || nextState === 'connecting' || nextState === 'reconnecting' || nextState === 'room_full' || nextState === 'partner_disconnected') {
+    room.dataset.connection = nextState;
+  } else {
+    room.dataset.connection = nextState === 'auth_error' || nextState === 'invalid_url' ? nextState : 'disconnected';
+  }
   applyConnectionText();
+  updateSetupPanel();
 }
 
 function applyConnectionText() {
   connectionText.textContent = t(connectionTextKey());
+  const modeText = t(serverUrlHelperKey(getServerUrlKind(serverUrl)));
+  const label = `${t('connectionTooltip')}: ${connectionText.textContent}. ${modeText}`;
+  connectionStatus.setAttribute('title', label);
+  connectionStatus.setAttribute('aria-label', label);
 }
 
 function applyConnectionInputs() {
-  serverUrlInput.value = serverUrl;
-  pairCodeInput.value = pairCode;
-  accessKeyInput.value = accessKey;
+  setInputValueIfChanged(serverUrlInput, serverUrl);
+  setInputValueIfChanged(pairCodeInput, pairCode);
+  setInputValueIfChanged(accessKeyInput, accessKey);
+  applySetupInputs();
 }
 
 function applyI18n() {
@@ -772,6 +1255,8 @@ function applyI18n() {
   updateTimeThemeText();
   updatePowerModeText();
   applyConnectionText();
+  updateMaximizeButton();
+  updateSetupPanel();
   refreshPetStateLabels();
   renderMessages();
 }
@@ -787,7 +1272,7 @@ function senderName(sender) {
 
 function messageText(message) {
   if (message.key) return format(message.key, message.values || {});
-  return message.text || '';
+  return sanitizeDisplayText(message.text || '');
 }
 
 function renderMessages() {
@@ -814,7 +1299,12 @@ function renderMessages() {
 }
 
 function pushMessage(sender, message) {
-  messages.push({ sender, ...message });
+  const safeMessage = { sender, ...message };
+  if (typeof safeMessage.text !== 'undefined') {
+    safeMessage.text = sanitizeDisplayText(safeMessage.text);
+  }
+
+  messages.push(safeMessage);
 
   // Keep the message log lightweight over long sessions.
   if (messages.length > 120) {
@@ -844,7 +1334,28 @@ function disconnectSocket() {
   socket = null;
 }
 
+function isSocketConnecting() {
+  return Boolean(socket && !socket.connected && socket.io?.engine?.readyState === 'opening');
+}
+
 function connectSocket({ announce = false } = {}) {
+  if (authRetryBlocked) {
+    setConnectionState('auth_error');
+    return;
+  }
+
+  const urlKind = getServerUrlKind(serverUrl);
+  if (!canAttemptServerConnection(urlKind)) {
+    isPaired = false;
+    setConnectionState(urlKind === 'invalid' ? 'invalid_url' : 'disconnected');
+    if (announce) pushMessage('system', { key: serverUrlHelperKey(urlKind) });
+    return;
+  }
+
+  if (socket?.connected || isSocketConnecting()) {
+    return;
+  }
+
   disconnectSocket();
 
   if (typeof window.io !== 'function') {
@@ -861,6 +1372,7 @@ function connectSocket({ announce = false } = {}) {
       pairCode,
       accessKey,
       clientKind: 'electron-desktop-pet',
+      appMode: APP_MODE,
       uiLanguage: currentLang
     },
     reconnection: true,
@@ -873,7 +1385,8 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('connect', () => {
     noteSocketActivity();
-    setConnectionState('connected');
+    isPaired = false;
+    setConnectionState('connecting');
     pushMessage('system', { key: 'connectionConnectedMessage' });
   });
 
@@ -884,24 +1397,43 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('waiting_for_partner', () => {
     noteSocketActivity();
+    isPaired = false;
     setConnectionState('waiting');
     pushMessage('system', { key: 'waitingForPartner' });
   });
 
   socket.on('paired', () => {
     noteSocketActivity();
-    setConnectionState('connected');
+    isPaired = true;
+    setConnectionState('paired');
     pushMessage('system', { key: 'partnerJoined' });
     setTimeout(() => emitMyPetPosition({ quiet: true }), 120);
   });
 
   socket.on('partner_disconnected', (payload = {}) => {
     noteSocketActivity();
-    setConnectionState('waiting');
+    isPaired = false;
+    setConnectionState('partner_disconnected');
     pushMessage('system', {
       key: 'partnerLeft',
       values: { reason: payload.reason || 'disconnect' }
     });
+  });
+
+  socket.on('auth_error', () => {
+    noteSocketActivity();
+    authRetryBlocked = true;
+    isPaired = false;
+    setConnectionState('auth_error');
+    pushMessage('system', { key: 'unauthorizedServer' });
+    socket?.disconnect();
+  });
+
+  socket.on('room_full', () => {
+    noteSocketActivity();
+    isPaired = false;
+    setConnectionState('room_full');
+    pushMessage('system', { key: 'setupStatusRoomFull' });
   });
 
   socket.on('not_paired', () => {
@@ -911,14 +1443,17 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('payload_error', (payload = {}) => {
     noteSocketActivity();
-    pushMessage('system', {
-      text: `${payload.event || 'event'}: ${payload.error || 'payload_error'}`
-    });
+    pushMessage('system', { key: 'payloadRejected' });
+  });
+
+  socket.on('rate_limited', () => {
+    noteSocketActivity();
+    pushMessage('system', { key: 'rateLimited' });
   });
 
   socket.on('send_msg', (payload = {}) => {
     noteSocketActivity();
-    const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+    const text = sanitizeDisplayText(payload.text, MAX_DISPLAY_MESSAGE_LENGTH);
     if (!text) return;
     pushMessage('partner', { text });
     showPetBubble('partner', text);
@@ -926,9 +1461,11 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('pet_action', (payload = {}) => {
     noteSocketActivity();
-    const incomingAction = String(payload.action || '').trim();
+    const incomingAction = sanitizeActionName(payload.action);
+    const incomingTarget = sanitizeActionName(payload.target);
+    const incomingPet = sanitizeActionName(payload.pet);
 
-    if (incomingAction === 'poke' && (payload.target === 'pet_me' || payload.pet === 'pet_me' || !payload.target)) {
+    if (incomingAction === 'poke' && (incomingTarget === 'pet_me' || incomingPet === 'pet_me' || !incomingTarget)) {
       pushMessage('partner', { key: 'pokeReceived' });
       triggerMyShockedReaction({ sendAck: true });
       return;
@@ -938,7 +1475,7 @@ function connectSocket({ announce = false } = {}) {
       const meta = typeof payload.meta === 'object' && payload.meta !== null ? payload.meta : {};
       const rawDuration = Number(meta.duration);
       const duration = Number.isFinite(rawDuration) ? clamp(rawDuration, 1200, 6000) : SHOCKED_DURATION_MS;
-      triggerPartnerShockedPreview(meta.text || t('shockedBubbleDefault'), { duration });
+      triggerPartnerShockedPreview(sanitizeDisplayText(meta.text, 120) || t('shockedBubbleDefault'), { duration });
       return;
     }
 
@@ -952,17 +1489,21 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('pet_move', (payload = {}) => {
     noteSocketActivity();
-    const x = Number(payload.x);
-    const y = Number(payload.y);
+    const x = clamp(Number(payload.x), 0, 100);
+    const y = clamp(Number(payload.y), 0, 100);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
-    setPetWalkThenIdle('partner', 900);
-    petPositions.partner = positionPetElement(petPartner, { x, y });
+    schedulePartnerPetPosition({ x, y });
   });
 
   socket.on('disconnect', (reason) => {
     noteSocketActivity();
-    setConnectionState('disconnected');
+    isPaired = false;
+    if (connectionState !== 'auth_error') {
+      setConnectionState('disconnected');
+    } else {
+      return;
+    }
     pushMessage('system', {
       key: 'socketDisconnected',
       values: { reason }
@@ -971,16 +1512,23 @@ function connectSocket({ announce = false } = {}) {
 
   socket.on('connect_error', (error) => {
     noteSocketActivity();
-    setConnectionState('disconnected');
+    isPaired = false;
     const reason = error?.message || 'connect_error';
+    const isAuthError = reason === 'auth_error' || reason === 'unauthorized';
+    if (isAuthError) {
+      authRetryBlocked = true;
+      socket?.disconnect();
+    }
+    setConnectionState(isAuthError ? 'auth_error' : 'disconnected');
     pushMessage('system', {
-      key: reason === 'unauthorized' ? 'unauthorizedServer' : 'socketError',
+      key: isAuthError ? 'unauthorizedServer' : 'socketError',
       values: { reason }
     });
   });
 
   socket.on('server_shutdown', () => {
     noteSocketActivity();
+    isPaired = false;
     setConnectionState('disconnected');
   });
 
@@ -996,7 +1544,7 @@ function connectSocket({ announce = false } = {}) {
 
   socket.io.on('reconnect', () => {
     noteSocketActivity();
-    setConnectionState('connected');
+    setConnectionState(isPaired ? 'paired' : 'connecting');
   });
 
   socket.io.on('reconnect_error', () => {
@@ -1004,47 +1552,87 @@ function connectSocket({ announce = false } = {}) {
   });
 }
 
-function saveConnectionSettingsAndReconnect() {
-  const nextServerUrl = serverUrlInput.value.trim() || DEFAULT_SERVER_URL;
-  const nextPairCode = pairCodeInput.value.trim() || DEFAULT_PAIR_CODE;
-  const nextAccessKey = accessKeyInput.value.trim();
+function reconnectIfNeeded(reason = 'resume') {
+  const now = Date.now();
+  if (now - lastReconnectCheckAt < 1500) return;
+  lastReconnectCheckAt = now;
 
+  if (authRetryBlocked || !String(serverUrl || '').trim()) {
+    if (!String(serverUrl || '').trim()) setConnectionState('disconnected');
+    return;
+  }
+
+  if (socket?.connected || isSocketConnecting()) {
+    return;
+  }
+
+  setConnectionState('reconnecting');
+  connectSocket({ announce: reason === 'manual' });
+}
+
+function saveConnectionSettings(nextServerUrl, nextPairCode, nextAccessKey) {
   serverUrl = nextServerUrl;
   pairCode = nextPairCode;
   accessKey = nextAccessKey;
   localStorage.setItem(SERVER_URL_STORAGE_KEY, serverUrl);
   localStorage.setItem(PAIR_CODE_STORAGE_KEY, pairCode);
   localStorage.setItem(ACCESS_KEY_STORAGE_KEY, accessKey);
+  applyConnectionInputs();
+}
+
+function saveConnectionSettingsAndReconnect(source = 'settings') {
+  const sourceServerUrlInput = source === 'setup' ? setupServerUrlInput : serverUrlInput;
+  const sourcePairCodeInput = source === 'setup' ? setupPairCodeInput : pairCodeInput;
+  const sourceAccessKeyInput = source === 'setup' ? setupAccessKeyInput : accessKeyInput;
+
+  const nextServerUrl = sourceServerUrlInput.value.trim() || DEFAULT_SERVER_URL;
+  const nextPairCode = normalizePairCodeInput(sourcePairCodeInput.value);
+  const nextAccessKey = sourceAccessKeyInput.value.trim();
+
+  saveConnectionSettings(nextServerUrl, nextPairCode, nextAccessKey);
+  authRetryBlocked = false;
+  isPaired = false;
+  disconnectSocket();
+
+  const urlKind = getServerUrlKind(nextServerUrl);
+  if (urlKind === 'localhost') {
+    pushMessage('system', { key: 'localhostRemoteWarning' });
+  } else if (urlKind === 'public_http' || urlKind === 'empty') {
+    pushMessage('system', { key: serverUrlHelperKey(urlKind) });
+  }
 
   pushMessage('system', { key: 'connectionSettingsSaved' });
   connectSocket({ announce: true });
 }
 
 
-function startPetDrag(event) {
+function startPetDrag(target, event) {
   if (event.button !== 0) return;
   markActivity('pet-drag-start', { force: true });
+
+  const element = target === 'partner' ? petPartner : petMe;
 
   event.preventDefault();
   event.stopPropagation();
   setMousePassThrough(false);
-  petMe.classList.add('is-dragging');
-  setPetState('me', PET_STATES.WALK, { force: true });
+  element.classList.add('is-dragging');
+  setPetState(target, PET_STATES.WALK, { force: true });
 
   const stageRect = petStageRect();
   action = {
     type: 'pet-drag',
+    petTarget: target,
     pointerId: event.pointerId,
-    target: petMe,
+    target: element,
     startX: event.clientX,
     startY: event.clientY,
     stageWidth: stageRect.width || 1,
     stageHeight: stageRect.height || 1,
-    startPosition: { ...petPositions.me },
+    startPosition: { ...petPositions[target] },
     moved: false
   };
 
-  petMe.setPointerCapture(event.pointerId);
+  element.setPointerCapture(event.pointerId);
 }
 
 function updatePetDrag(event) {
@@ -1055,23 +1643,39 @@ function updatePetDrag(event) {
     action.moved = true;
   }
 
-  petPositions.me = positionPetElement(petMe, {
+  const target = action.petTarget === 'partner' ? 'partner' : 'me';
+  const element = target === 'partner' ? petPartner : petMe;
+
+  petPositions[target] = positionPetElement(element, {
     x: action.startPosition.x + dxPercent,
     y: action.startPosition.y + dyPercent
   });
 }
 
 function finishPetDrag(finishedAction) {
-  petMe.classList.remove('is-dragging');
-  setPetState('me', PET_STATES.IDLE, { force: true });
-  petPositions.me = positionPetElement(petMe, petPositions.me);
+  const target = finishedAction.petTarget === 'partner' ? 'partner' : 'me';
+  const element = target === 'partner' ? petPartner : petMe;
+
+  element.classList.remove('is-dragging');
+  setPetState(target, PET_STATES.IDLE, { force: true });
+  petPositions[target] = positionPetElement(element, petPositions[target]);
   savePetPositions();
-  emitMyPetPosition();
+
+  if (target === 'me') {
+    emitMyPetPosition();
+  }
 
   if (!finishedAction.moved) {
-    popPet(petMe);
-    showPetBubble('me', t('petMeClick'));
-    pushMessage('pet_me', { key: 'petMeClick' });
+    if (target === 'partner') {
+      suppressPartnerClick = true;
+      pokePartnerPet();
+    } else {
+      popPet(petMe);
+      showPetBubble('me', t('petMeClick'));
+      pushMessage('pet_me', { key: 'petMeClick' });
+    }
+  } else if (target === 'partner') {
+    suppressPartnerClick = true;
   }
 }
 
@@ -1197,7 +1801,7 @@ function stopAction(event) {
 
 function handleMouseMove(event) {
   markActivity('mouse');
-  updateMousePassThroughForPoint(event.clientX, event.clientY);
+  scheduleMousePassThroughForPoint(event.clientX, event.clientY);
 }
 
 settingsButton.addEventListener('click', () => {
@@ -1205,6 +1809,19 @@ settingsButton.addEventListener('click', () => {
   forceRoomInteractive(1200);
   settingsPanel.hidden = !settingsPanel.hidden;
   setMousePassThrough(false);
+});
+
+minimizeWindowButton.addEventListener('click', () => {
+  markActivity('minimize-window', { force: true });
+  api.minimize();
+});
+
+maximizeRoomButton.addEventListener('click', () => {
+  toggleRoomMaximize();
+});
+
+closeWindowButton.addEventListener('click', () => {
+  api.quit();
 });
 
 closeSettingsButton.addEventListener('click', () => {
@@ -1226,12 +1843,94 @@ applyConnectionButton.addEventListener('click', () => {
   saveConnectionSettingsAndReconnect();
 });
 
+serverUrlInput.addEventListener('input', updateServerUrlHelpers);
+setupServerUrlInput.addEventListener('input', updateSetupPanel);
+setupPairCodeInput.addEventListener('input', updateSetupPanel);
+
+setupPairCodeInput.addEventListener('blur', () => {
+  setupPairCodeInput.value = normalizePairCodeInput(setupPairCodeInput.value);
+});
+
+generatePairCodeButton.addEventListener('click', () => {
+  markActivity('generate-pair-code', { force: true });
+  setupPairCodeInput.value = generatePairCode();
+  pairCodeInput.value = setupPairCodeInput.value;
+  pushMessage('system', { key: 'pairCodeGenerated' });
+  updateSetupPanel();
+});
+
+copyPairCodeButton.addEventListener('click', async () => {
+  markActivity('copy-pair-code', { force: true });
+  const normalized = normalizePairCodeInput(setupPairCodeInput.value || pairCode);
+  setupPairCodeInput.value = normalized;
+  pairCodeInput.value = normalized;
+
+  try {
+    await navigator.clipboard.writeText(normalized);
+    pushMessage('system', { key: 'pairCodeCopied' });
+  } catch {
+    setupPairCodeInput.select();
+    pushMessage('system', { key: 'pairCodeCopyFailed' });
+  }
+});
+
+setupApplyButton.addEventListener('click', () => {
+  markActivity('setup-apply', { force: true });
+  setupDismissed = false;
+  localStorage.setItem(SETUP_DISMISSED_STORAGE_KEY, 'false');
+  saveConnectionSettingsAndReconnect('setup');
+});
+
+setupLaterButton.addEventListener('click', () => {
+  markActivity('setup-later', { force: true });
+  setupDismissed = true;
+  localStorage.setItem(SETUP_DISMISSED_STORAGE_KEY, 'true');
+  updateSetupPanel();
+});
+
 
 savePetTextButton.addEventListener('click', () => {
   markActivity('save-pet-text', { force: true });
   saveShockedTexts();
   pushMessage('system', { key: 'petTextSaved' });
   messageInput.focus();
+});
+
+roomOpacityInput.addEventListener('input', () => {
+  markActivity('room-opacity', { force: true });
+  appearance.roomOpacity = clamp(Number(roomOpacityInput.value), 0, 100);
+  applyAppearance();
+  saveAppearance();
+});
+
+petScaleInput.addEventListener('input', () => {
+  markActivity('pet-scale', { force: true });
+  appearance.petScale = clamp(Number(petScaleInput.value), 70, 180);
+  applyAppearance();
+  saveAppearance();
+});
+
+dayBackgroundInput.addEventListener('change', () => {
+  handleBackgroundUpload('day', dayBackgroundInput);
+});
+
+nightBackgroundInput.addEventListener('change', () => {
+  handleBackgroundUpload('night', nightBackgroundInput);
+});
+
+resetAppearanceButton.addEventListener('click', () => {
+  markActivity('reset-appearance', { force: true });
+  appearance = {
+    roomOpacity: 100,
+    petScale: 100,
+    dayBackground: '',
+    nightBackground: ''
+  };
+  dayBackgroundInput.value = '';
+  nightBackgroundInput.value = '';
+  applyAppearance();
+  saveAppearance();
+  pushMessage('system', { key: 'appearanceReset' });
 });
 
 room.addEventListener('focusin', () => {
@@ -1264,7 +1963,7 @@ langButtons.forEach((button) => {
 messageForm.addEventListener('submit', (event) => {
   markActivity('message-submit', { force: true });
   event.preventDefault();
-  const text = messageInput.value.trim();
+  const text = sanitizeDisplayText(messageInput.value, MAX_DISPLAY_MESSAGE_LENGTH);
   if (!text) return;
 
   pushMessage('user', { text });
@@ -1279,7 +1978,7 @@ messageForm.addEventListener('submit', (event) => {
   messageInput.focus();
 });
 
-petMe.addEventListener('pointerdown', startPetDrag);
+petMe.addEventListener('pointerdown', (event) => startPetDrag('me', event));
 petMe.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' && event.key !== ' ') return;
   event.preventDefault();
@@ -1289,7 +1988,15 @@ petMe.addEventListener('keydown', (event) => {
 });
 
 
-petPartner.addEventListener('click', pokePartnerPet);
+petPartner.addEventListener('pointerdown', (event) => startPetDrag('partner', event));
+petPartner.addEventListener('click', () => {
+  if (suppressPartnerClick) {
+    suppressPartnerClick = false;
+    return;
+  }
+
+  pokePartnerPet();
+});
 petPartner.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' && event.key !== ' ') return;
   event.preventDefault();
@@ -1300,9 +2007,9 @@ dragHandle.addEventListener('pointerdown', startDrag);
 resizeHandles.forEach((handle) => handle.addEventListener('pointerdown', startResize));
 
 window.addEventListener('pointermove', (event) => {
-  markActivity('pointer-move');
   if (!action) return;
 
+  markActivity('pointer-move');
   if (action.type === 'drag') updateDrag(event);
   if (action.type === 'resize') updateResize(event);
   if (action.type === 'pet-drag') updatePetDrag(event);
@@ -1328,7 +2035,7 @@ room.addEventListener('mouseleave', (event) => {
 });
 
 window.addEventListener('resize', () => {
-  box = clampBox(box);
+  box = isRoomMaximized ? getMaximizedBox() : clampBox(box);
   applyBox();
   applyPetPositions();
   saveBox();
@@ -1342,16 +2049,36 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-applyBox();
-requestAnimationFrame(() => {
-  applyPetPositions();
-  savePetPositions();
+window.addEventListener('focus', () => {
+  markActivity('window-focus', { force: true });
+  reconnectIfNeeded('focus');
 });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    markActivity('visibility', { force: true });
+    reconnectIfNeeded('visibility');
+  }
+});
+
+window.addEventListener('online', () => {
+  markActivity('online', { force: true });
+  reconnectIfNeeded('online');
+});
+
+window.addEventListener('offline', () => {
+  isPaired = false;
+  setConnectionState('disconnected');
+});
+
+applyBox();
+schedulePetPositionRefresh({ save: true });
 applyConnectionInputs();
 applyPetTextInputs();
 currentTimeTheme = getTimeTheme();
 room.dataset.theme = currentTimeTheme;
 document.body.dataset.theme = currentTimeTheme;
+applyAppearance();
 applyI18n();
 setPetState('me', PET_STATES.IDLE, { force: true });
 setPetState('partner', PET_STATES.IDLE, { force: true });

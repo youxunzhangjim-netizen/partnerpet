@@ -1,7 +1,9 @@
 node_modules
-npm-debug.log
+npm-debug.log*
 .env
-.git
-.gitignore
+.env.*
+!.env.example
 Dockerfile
-README*
+fly.toml
+*.local
+.DS_Store

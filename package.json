@@ -2,17 +2,20 @@
   "name": "transparent-pet-room",
   "version": "0.5.0",
   "description": "Transparent fullscreen desktop pet room with deployable Socket.IO bridge, accountless pairing, dual pets, state machine, and low-power optimization.",
+  "author": "PartnerPets",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
+    "electron-start": "electron main.js",
+    "dev": "electron main.js --dev",
     "server": "npm --prefix server start",
+    "server:root": "node server.js",
     "pack": "electron-builder --dir",
     "dist": "electron-builder --publish never",
-    "dist:win": "electron-builder --win nsis portable --publish never",
-    "dist:mac": "electron-builder --mac dmg zip --publish never",
-    "dist:linux": "electron-builder --linux AppImage deb --publish never"
+    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:mac": "electron-builder --mac dmg --publish never",
+    "dist:linux": "electron-builder --linux AppImage --publish never"
   },
   "dependencies": {
     "socket.io-client": "^4.8.3"
@@ -22,16 +25,20 @@
     "electron-builder": "^26.15.3"
   },
   "build": {
-    "appId": "com.transparentpet.room",
-    "productName": "Transparent Pet Room",
-    "copyright": "Copyright © 2026 Transparent Pet Room",
+    "appId": "com.partnerpets.desktop",
+    "productName": "PartnerPets",
+    "copyright": "Copyright (c) 2026 PartnerPets",
     "directories": {
-      "output": "dist"
+      "output": "release"
+    },
+    "extraMetadata": {
+      "main": "main.js"
     },
     "files": [
       "package.json",
       "main.js",
       "preload.js",
+      "config.js",
       "index.html",
       "renderer.js",
       "assets/**/*",
@@ -40,21 +47,18 @@
     "asar": true,
     "mac": {
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ],
       "category": "public.app-category.entertainment"
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "AppImage"
       ],
       "category": "Utility"
     },
